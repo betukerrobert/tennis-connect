@@ -10,6 +10,10 @@ function Signup() {
     venue: 'Venue',
   };
 
+  const handleSignup = () => {
+    navigate('/discovery');
+  };
+
   return (
     <div style={styles.container}>
 
@@ -43,7 +47,7 @@ function Signup() {
           <input style={styles.input} type="text" placeholder="City or town" />
         </div>
 
-        <button style={styles.button}>
+        <button style={styles.button} onClick={handleSignup}>
           Create Account
         </button>
 

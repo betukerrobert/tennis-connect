@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 function Login() {
   const navigate = useNavigate();
 
+  const handleLogin = () => {
+    navigate('/discovery');
+  };
+
   return (
     <div style={styles.container}>
 
@@ -28,7 +32,7 @@ function Login() {
 
         <p style={styles.forgotPassword}>Forgot your password?</p>
 
-        <button style={styles.button}>
+        <button style={styles.button} onClick={handleLogin}>
           Log In
         </button>
 
