@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { theme, roleColors, roleLabels } from '../theme';
+import SwipeMode from '../components/SwipeMode';
 
 const DUMMY_USERS = [
   { id: 1, name: 'Alex Johnson', role: 'player', level: 'Intermediate', location: 'London, UK', bio: 'Looking for a hitting partner on weekends. Play 3x per week.', available: 'Weekends' },
@@ -11,9 +12,22 @@ const DUMMY_USERS = [
 
 function Discovery() {
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [pressed, setPressed] = useState(null);
+  const [swipeMode, setSwipeMode] = useState(false);
 
-  const filtered = filter === 'all' ? DUMMY_USERS : DUMMY_USERS.filter(u => u.role === filter);
+  if (swipeMode) {
+    return <SwipeMode onClose={() => setSwipeMode(false)} />;
+  }
+
+  const filtered = DUMMY_USERS.filter(u => {
+    const matchesFilter = filter === 'all' || u.role === filter;
+    const matchesSearch = search === '' ||
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
+      u.location.toLowerCase().includes(search.toLowerCase()) ||
+      u.level.toLowerCase().includes(search.toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
 
   const filters = [
     { id: 'all', label: 'All' },
@@ -30,12 +44,22 @@ function Discovery() {
           <h1 style={styles.pageTitle}>Discover</h1>
           <p style={styles.location}>📍 London, UK</p>
         </div>
-        <div style={styles.notifBtn}>🔔</div>
+        <button style={styles.swipeModeBtn} onClick={() => setSwipeMode(true)}>
+          🎾 Swipe Mode
+        </button>
       </div>
 
       <div style={styles.searchBar}>
         <span style={styles.searchIcon}>🔍</span>
-        <input style={styles.searchInput} placeholder="Search players, coaches, venues..." />
+        <input
+          style={styles.searchInput}
+          placeholder="Search by name, location or level..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        {search && (
+          <span style={styles.clearSearch} onClick={() => setSearch('')}>✕</span>
+        )}
       </div>
 
       <div style={styles.filterRow}>
@@ -56,46 +80,56 @@ function Discovery() {
         ))}
       </div>
 
-      <p style={styles.resultsCount}>{filtered.length} results near you</p>
+      <p style={styles.resultsCount}>
+        {filtered.length} result{filtered.length !== 1 ? 's' : ''} near you
+      </p>
 
       <div style={styles.feed}>
-        {filtered.map(user => (
-          <div
-            key={user.id}
-            style={{
-              ...styles.card,
-              transform: pressed === user.id ? 'scale(0.98)' : 'scale(1)',
-              transition: 'transform 0.15s ease',
-            }}
-            onMouseDown={() => setPressed(user.id)}
-            onMouseUp={() => setPressed(null)}
-            onMouseLeave={() => setPressed(null)}
-          >
-            <div style={styles.cardTop}>
-              <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] }}>
-                {user.name.charAt(0)}
-              </div>
-              <div style={styles.cardInfo}>
-                <div style={styles.cardNameRow}>
-                  <h3 style={styles.cardName}>{user.name}</h3>
-                  <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '18', color: roleColors[user.role] }}>
-                    {roleLabels[user.role]}
-                  </span>
-                </div>
-                <div style={styles.cardMeta}>
-                  <span style={styles.metaItem}>📍 {user.location}</span>
-                  <span style={styles.metaDot}>·</span>
-                  <span style={styles.metaItem}>⭐ {user.level}</span>
-                </div>
-              </div>
-            </div>
-            <p style={styles.cardBio}>{user.bio}</p>
-            <div style={styles.cardFooter}>
-              <span style={styles.availability}>🕐 {user.available}</span>
-              <button style={styles.connectBtn}>Connect</button>
-            </div>
+        {filtered.length === 0 ? (
+          <div style={styles.noResults}>
+            <span style={styles.noResultsEmoji}>🔍</span>
+            <p style={styles.noResultsText}>No results found for "{search}"</p>
+            <button style={styles.clearBtn} onClick={() => setSearch('')}>Clear Search</button>
           </div>
-        ))}
+        ) : (
+          filtered.map(user => (
+            <div
+              key={user.id}
+              style={{
+                ...styles.card,
+                transform: pressed === user.id ? 'scale(0.98)' : 'scale(1)',
+                transition: 'transform 0.15s ease',
+              }}
+              onMouseDown={() => setPressed(user.id)}
+              onMouseUp={() => setPressed(null)}
+              onMouseLeave={() => setPressed(null)}
+            >
+              <div style={styles.cardTop}>
+                <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] }}>
+                  {user.name.charAt(0)}
+                </div>
+                <div style={styles.cardInfo}>
+                  <div style={styles.cardNameRow}>
+                    <h3 style={styles.cardName}>{user.name}</h3>
+                    <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '18', color: roleColors[user.role] }}>
+                      {roleLabels[user.role]}
+                    </span>
+                  </div>
+                  <div style={styles.cardMeta}>
+                    <span style={styles.metaItem}>📍 {user.location}</span>
+                    <span style={styles.metaDot}>·</span>
+                    <span style={styles.metaItem}>⭐ {user.level}</span>
+                  </div>
+                </div>
+              </div>
+              <p style={styles.cardBio}>{user.bio}</p>
+              <div style={styles.cardFooter}>
+                <span style={styles.availability}>🕐 {user.available}</span>
+                <button style={styles.connectBtn}>Connect</button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
     </div>
@@ -123,9 +157,17 @@ const styles = {
     fontSize: '13px',
     margin: '0',
   },
-  notifBtn: {
-    fontSize: '24px',
+  swipeModeBtn: {
+    backgroundColor: '#0a1628',
+    color: '#c8ff00',
+    padding: '10px 16px',
+    borderRadius: '999px',
+    border: 'none',
+    fontSize: '13px',
+    fontWeight: '800',
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    boxShadow: '0 4px 12px rgba(10,22,40,0.2)',
   },
   searchBar: {
     backgroundColor: 'white',
@@ -137,9 +179,7 @@ const styles = {
     boxShadow: '0 2px 8px rgba(10,22,40,0.06)',
     marginBottom: '16px',
   },
-  searchIcon: {
-    fontSize: '16px',
-  },
+  searchIcon: { fontSize: '16px' },
   searchInput: {
     border: 'none',
     outline: 'none',
@@ -147,6 +187,12 @@ const styles = {
     color: '#0a1628',
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  clearSearch: {
+    fontSize: '14px',
+    color: '#9aa0ac',
+    cursor: 'pointer',
+    fontWeight: '700',
   },
   filterRow: {
     display: 'flex',
@@ -199,9 +245,7 @@ const styles = {
     fontWeight: '800',
     flexShrink: 0,
   },
-  cardInfo: {
-    flex: 1,
-  },
+  cardInfo: { flex: 1 },
   cardNameRow: {
     display: 'flex',
     alignItems: 'center',
@@ -226,13 +270,8 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
   },
-  metaItem: {
-    fontSize: '12px',
-    color: '#9aa0ac',
-  },
-  metaDot: {
-    color: '#9aa0ac',
-  },
+  metaItem: { fontSize: '12px', color: '#9aa0ac' },
+  metaDot: { color: '#9aa0ac' },
   cardBio: {
     fontSize: '13px',
     color: '#5a6270',
@@ -244,14 +283,31 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  availability: {
-    fontSize: '12px',
-    color: '#9aa0ac',
-  },
+  availability: { fontSize: '12px', color: '#9aa0ac' },
   connectBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
     padding: '8px 18px',
+    borderRadius: '999px',
+    border: 'none',
+    fontSize: '13px',
+    fontWeight: '800',
+    cursor: 'pointer',
+  },
+  noResults: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '60px 20px',
+    gap: '12px',
+  },
+  noResultsEmoji: { fontSize: '48px' },
+  noResultsText: { fontSize: '15px', color: '#9aa0ac', margin: '0' },
+  clearBtn: {
+    backgroundColor: '#0a1628',
+    color: '#c8ff00',
+    padding: '10px 24px',
     borderRadius: '999px',
     border: 'none',
     fontSize: '13px',
