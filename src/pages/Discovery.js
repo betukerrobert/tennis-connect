@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { theme, roleColors, roleLabels } from '../theme';
 
 const DUMMY_USERS = [
@@ -11,7 +10,6 @@ const DUMMY_USERS = [
 ];
 
 function Discovery() {
-  const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [pressed, setPressed] = useState(null);
 
@@ -27,9 +25,9 @@ function Discovery() {
   return (
     <div style={styles.container}>
 
-      <div style={styles.header}>
+      <div style={styles.topBar}>
         <div>
-          <h1 style={styles.logo}>Tennis Connect</h1>
+          <h1 style={styles.pageTitle}>Discover</h1>
           <p style={styles.location}>📍 London, UK</p>
         </div>
         <div style={styles.notifBtn}>🔔</div>
@@ -49,7 +47,6 @@ function Discovery() {
               backgroundColor: filter === f.id ? theme.colors.primary : 'white',
               color: filter === f.id ? theme.colors.accent : theme.colors.gray600,
               border: filter === f.id ? `2px solid ${theme.colors.primary}` : '2px solid #e0e4ea',
-              transform: filter === f.id ? 'scale(1.02)' : 'scale(1)',
               transition: 'all 0.15s ease',
             }}
             onClick={() => setFilter(f.id)}
@@ -59,8 +56,9 @@ function Discovery() {
         ))}
       </div>
 
+      <p style={styles.resultsCount}>{filtered.length} results near you</p>
+
       <div style={styles.feed}>
-        <p style={styles.resultsCount}>{filtered.length} results near you</p>
         {filtered.map(user => (
           <div
             key={user.id}
@@ -91,32 +89,13 @@ function Discovery() {
                 </div>
               </div>
             </div>
-
             <p style={styles.cardBio}>{user.bio}</p>
-
             <div style={styles.cardFooter}>
               <span style={styles.availability}>🕐 {user.available}</span>
-              <button style={styles.connectBtn}>
-                Connect
-              </button>
+              <button style={styles.connectBtn}>Connect</button>
             </div>
           </div>
         ))}
-      </div>
-
-      <div style={styles.bottomNav}>
-        <div style={styles.navItem}>
-          <span style={styles.navIcon}>🔍</span>
-          <span style={styles.navLabelActive}>Discover</span>
-        </div>
-        <div style={styles.navItem} onClick={() => navigate('/messages')}>
-          <span style={styles.navIcon}>💬</span>
-          <span style={styles.navLabel}>Messages</span>
-        </div>
-        <div style={styles.navItem} onClick={() => navigate('/profile')}>
-          <span style={styles.navIcon}>👤</span>
-          <span style={styles.navLabel}>Profile</span>
-        </div>
       </div>
 
     </div>
@@ -126,37 +105,29 @@ function Discovery() {
 const styles = {
   container: {
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
-    maxWidth: '480px',
-    margin: '0 auto',
-    backgroundColor: '#f4f6f8',
-    minHeight: '100vh',
-    paddingBottom: '80px',
   },
-  header: {
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    padding: '20px',
+  topBar: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: '20px',
   },
-  logo: {
-    color: 'white',
-    fontSize: '18px',
+  pageTitle: {
+    fontSize: '24px',
     fontWeight: '800',
-    margin: '0 0 2px 0',
-    letterSpacing: '-0.3px',
+    color: '#0a1628',
+    margin: '0 0 4px 0',
   },
   location: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '12px',
+    color: '#9aa0ac',
+    fontSize: '13px',
     margin: '0',
   },
   notifBtn: {
-    fontSize: '20px',
+    fontSize: '24px',
     cursor: 'pointer',
   },
   searchBar: {
-    margin: '16px',
     backgroundColor: 'white',
     borderRadius: '14px',
     display: 'flex',
@@ -164,6 +135,7 @@ const styles = {
     padding: '12px 16px',
     gap: '10px',
     boxShadow: '0 2px 8px rgba(10,22,40,0.06)',
+    marginBottom: '16px',
   },
   searchIcon: {
     fontSize: '16px',
@@ -179,36 +151,33 @@ const styles = {
   filterRow: {
     display: 'flex',
     gap: '8px',
-    padding: '0 16px 16px 16px',
-    overflowX: 'auto',
+    marginBottom: '16px',
+    flexWrap: 'wrap',
   },
   filterBtn: {
-    padding: '8px 16px',
+    padding: '8px 18px',
     borderRadius: '999px',
     fontSize: '13px',
     cursor: 'pointer',
     fontWeight: '700',
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-  },
-  feed: {
-    padding: '0 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
   },
   resultsCount: {
     fontSize: '12px',
     color: '#9aa0ac',
-    margin: '0 0 4px 0',
+    margin: '0 0 12px 0',
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
   },
+  feed: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '16px',
+  },
   card: {
     backgroundColor: 'white',
     borderRadius: '16px',
-    padding: '16px',
+    padding: '18px',
     boxShadow: '0 2px 12px rgba(10,22,40,0.07)',
     cursor: 'pointer',
   },
@@ -238,6 +207,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     marginBottom: '4px',
+    flexWrap: 'wrap',
   },
   cardName: {
     margin: '0',
@@ -262,7 +232,6 @@ const styles = {
   },
   metaDot: {
     color: '#9aa0ac',
-    fontSize: '12px',
   },
   cardBio: {
     fontSize: '13px',
@@ -288,41 +257,6 @@ const styles = {
     fontSize: '13px',
     fontWeight: '800',
     cursor: 'pointer',
-    letterSpacing: '0.3px',
-  },
-  bottomNav: {
-    position: 'fixed',
-    bottom: '0',
-    width: '100%',
-    maxWidth: '480px',
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    display: 'flex',
-    justifyContent: 'space-around',
-    padding: '12px 0 16px 0',
-    zIndex: 100,
-  },
-  navItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    cursor: 'pointer',
-    gap: '3px',
-  },
-  navIcon: {
-    fontSize: '22px',
-  },
-  navLabel: {
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  navLabelActive: {
-    fontSize: '10px',
-    color: '#c8ff00',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    fontWeight: 'bold',
   },
 };
 
