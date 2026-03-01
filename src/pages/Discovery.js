@@ -1,30 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { theme, roleColors, roleLabels } from '../theme';
 import SwipeMode from '../components/SwipeMode';
 import Logo from '../components/Logo';
-
-const DUMMY_USERS = [
-  { id: 1, name: 'Alex Johnson', role: 'player', level: 'Intermediate', location: 'London, UK', bio: 'Looking for a hitting partner on weekends. Play 3x per week.', available: 'Weekends' },
-  { id: 2, name: 'Sarah Williams', role: 'coach', level: 'Pro Coach', location: 'Manchester, UK', bio: '10 years coaching experience. Work with all levels from beginner to competitive.', available: 'Mon-Fri' },
-  { id: 3, name: 'City Tennis Club', role: 'venue', level: '6 Courts', location: 'Birmingham, UK', bio: 'Indoor and outdoor courts available. Floodlit evenings. Booking required.', available: 'Daily 7am-10pm' },
-  { id: 4, name: 'Marco Rossi', role: 'player', level: 'Advanced', location: 'London, UK', bio: 'Competitive player looking for sparring partners at a high level.', available: 'Evenings' },
-  { id: 5, name: 'Emma Davis', role: 'coach', level: 'Certified Coach', location: 'London, UK', bio: 'Specialist in junior development and beginner adults. Patient and encouraging.', available: 'Weekdays' },
-];
+import { supabase } from '../supabase';
 
 function Discovery() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [pressed, setPressed] = useState(null);
   const [swipeMode, setSwipeMode] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} />;
+  useEffect(() => {
+    fetchUsers();
+    fetchCurrentUser();
+  }, []);
 
-  const filtered = DUMMY_USERS.filter(u => {
+  const fetchCurrentUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setCurrentUser(user);
+  };
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching users:', error);
+    } else {
+      setUsers(data || []);
+    }
+    setLoading(false);
+  };
+
+  if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} users={users} />;
+
+  // Filter out current user from feed
+  const filtered = users.filter(u => {
+    if (currentUser && u.id === currentUser.id) return false;
     const matchesFilter = filter === 'all' || u.role === filter;
     const matchesSearch = search === '' ||
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.location.toLowerCase().includes(search.toLowerCase()) ||
-      u.level.toLowerCase().includes(search.toLowerCase());
+      (u.full_name && u.full_name.toLowerCase().includes(search.toLowerCase())) ||
+      (u.location && u.location.toLowerCase().includes(search.toLowerCase())) ||
+      (u.level && u.level.toLowerCase().includes(search.toLowerCase()));
     return matchesFilter && matchesSearch;
   });
 
@@ -38,7 +61,6 @@ function Discovery() {
   return (
     <div style={styles.container}>
 
-      {/* Header with Logo */}
       <div style={styles.topBar}>
         <div style={styles.topBarLeft}>
           <Logo size="md" dark={true} />
@@ -49,11 +71,9 @@ function Discovery() {
         </button>
       </div>
 
-      {/* Page title */}
       <h1 style={styles.pageTitle}>Discover</h1>
       <p style={styles.pageSubtitle}>Find players, coaches and venues near you</p>
 
-      {/* Search */}
       <div style={styles.searchBar}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9aa0ac" strokeWidth="1.8" strokeLinecap="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -69,7 +89,6 @@ function Discovery() {
         )}
       </div>
 
-      {/* Filters */}
       <div style={styles.filterRow}>
         {filters.map(f => (
           <button
@@ -88,57 +107,79 @@ function Discovery() {
         ))}
       </div>
 
-      <p style={styles.resultsCount}>
-        {filtered.length} result{filtered.length !== 1 ? 's' : ''} near you
-      </p>
+      {loading ? (
+        <div style={styles.loadingContainer}>
+          <div style={styles.loadingSpinner} />
+          <p style={styles.loadingText}>Finding people near you...</p>
+        </div>
+      ) : (
+        <>
+          <p style={styles.resultsCount}>
+            {filtered.length} result{filtered.length !== 1 ? 's' : ''} near you
+          </p>
 
-      {/* Cards */}
-      <div style={styles.feed}>
-        {filtered.length === 0 ? (
-          <div style={styles.noResults}>
-            <p style={styles.noResultsText}>No results for "{search}"</p>
-            <button style={styles.clearBtn} onClick={() => setSearch('')}>Clear Search</button>
+          <div style={styles.feed}>
+            {filtered.length === 0 ? (
+              <div style={styles.noResults}>
+                {search ? (
+                  <>
+                    <p style={styles.noResultsText}>No results for "{search}"</p>
+                    <button style={styles.clearBtn} onClick={() => setSearch('')}>Clear Search</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '40px' }}>🎾</span>
+                    <p style={styles.noResultsText}>No players found yet.</p>
+                    <p style={styles.noResultsSubtext}>Be the first to invite friends!</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              filtered.map(user => (
+                <div
+                  key={user.id}
+                  style={{
+                    ...styles.card,
+                    transform: pressed === user.id ? 'scale(0.98)' : 'scale(1)',
+                    transition: 'transform 0.15s ease',
+                  }}
+                  onMouseDown={() => setPressed(user.id)}
+                  onMouseUp={() => setPressed(null)}
+                  onMouseLeave={() => setPressed(null)}
+                >
+                  <div style={styles.cardTop}>
+                    <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] || '#0a1628' }}>
+                      {user.full_name ? user.full_name.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    <div style={styles.cardInfo}>
+                      <div style={styles.cardNameRow}>
+                        <h3 style={styles.cardName}>{user.full_name || 'Unknown'}</h3>
+                        {user.role && (
+                          <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '15', color: roleColors[user.role] }}>
+                            {roleLabels[user.role]}
+                          </span>
+                        )}
+                      </div>
+                      <div style={styles.cardMeta}>
+                        {user.location && <span style={styles.metaItem}>📍 {user.location}</span>}
+                        {user.level && <>
+                          <span style={styles.metaDot}>·</span>
+                          <span style={styles.metaItem}>⭐ {user.level}</span>
+                        </>}
+                      </div>
+                    </div>
+                  </div>
+                  {user.bio && <p style={styles.cardBio}>{user.bio}</p>}
+                  <div style={styles.cardFooter}>
+                    {user.availability && <span style={styles.availability}>🕐 {user.availability}</span>}
+                    <button style={styles.connectBtn}>Connect</button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        ) : (
-          filtered.map(user => (
-            <div
-              key={user.id}
-              style={{
-                ...styles.card,
-                transform: pressed === user.id ? 'scale(0.98)' : 'scale(1)',
-                transition: 'transform 0.15s ease',
-              }}
-              onMouseDown={() => setPressed(user.id)}
-              onMouseUp={() => setPressed(null)}
-              onMouseLeave={() => setPressed(null)}
-            >
-              <div style={styles.cardTop}>
-                <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] }}>
-                  {user.name.charAt(0)}
-                </div>
-                <div style={styles.cardInfo}>
-                  <div style={styles.cardNameRow}>
-                    <h3 style={styles.cardName}>{user.name}</h3>
-                    <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '15', color: roleColors[user.role] }}>
-                      {roleLabels[user.role]}
-                    </span>
-                  </div>
-                  <div style={styles.cardMeta}>
-                    <span style={styles.metaItem}>📍 {user.location}</span>
-                    <span style={styles.metaDot}>·</span>
-                    <span style={styles.metaItem}>⭐ {user.level}</span>
-                  </div>
-                </div>
-              </div>
-              <p style={styles.cardBio}>{user.bio}</p>
-              <div style={styles.cardFooter}>
-                <span style={styles.availability}>🕐 {user.available}</span>
-                <button style={styles.connectBtn}>Connect</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+        </>
+      )}
 
     </div>
   );
@@ -163,7 +204,6 @@ const styles = {
     fontSize: '11px',
     color: '#9aa0ac',
     fontWeight: '400',
-    letterSpacing: '0.3px',
   },
   swipeModeBtn: {
     backgroundColor: '#0a1628',
@@ -174,7 +214,6 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     cursor: 'pointer',
-    letterSpacing: '0.3px',
     boxShadow: '0 4px 12px rgba(10,22,40,0.18)',
   },
   pageTitle: {
@@ -227,7 +266,26 @@ const styles = {
     fontSize: '12px',
     cursor: 'pointer',
     fontWeight: '500',
-    letterSpacing: '0.2px',
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '60px 20px',
+    gap: '16px',
+  },
+  loadingSpinner: {
+    width: '32px',
+    height: '32px',
+    border: '3px solid #e0e4ea',
+    borderTop: '3px solid #0a1628',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  loadingText: {
+    fontSize: '13px',
+    color: '#9aa0ac',
+    fontWeight: '400',
   },
   resultsCount: {
     fontSize: '11px',
@@ -287,7 +345,6 @@ const styles = {
     padding: '2px 8px',
     borderRadius: '999px',
     fontWeight: '500',
-    letterSpacing: '0.3px',
   },
   cardMeta: {
     display: 'flex',
@@ -318,7 +375,6 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     cursor: 'pointer',
-    letterSpacing: '0.2px',
   },
   noResults: {
     gridColumn: '1 / -1',
@@ -326,9 +382,11 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '60px 20px',
-    gap: '12px',
+    gap: '10px',
+    textAlign: 'center',
   },
   noResultsText: { fontSize: '14px', color: '#9aa0ac', margin: '0', fontWeight: '400' },
+  noResultsSubtext: { fontSize: '12px', color: '#c8ff00', margin: '0', fontWeight: '500' },
   clearBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
