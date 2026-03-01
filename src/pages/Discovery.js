@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { theme, roleColors, roleLabels } from '../theme';
 import SwipeMode from '../components/SwipeMode';
+import Logo from '../components/Logo';
 
 const DUMMY_USERS = [
   { id: 1, name: 'Alex Johnson', role: 'player', level: 'Intermediate', location: 'London, UK', bio: 'Looking for a hitting partner on weekends. Play 3x per week.', available: 'Weekends' },
@@ -16,9 +17,7 @@ function Discovery() {
   const [pressed, setPressed] = useState(null);
   const [swipeMode, setSwipeMode] = useState(false);
 
-  if (swipeMode) {
-    return <SwipeMode onClose={() => setSwipeMode(false)} />;
-  }
+  if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} />;
 
   const filtered = DUMMY_USERS.filter(u => {
     const matchesFilter = filter === 'all' || u.role === filter;
@@ -39,18 +38,26 @@ function Discovery() {
   return (
     <div style={styles.container}>
 
+      {/* Header with Logo */}
       <div style={styles.topBar}>
-        <div>
-          <h1 style={styles.pageTitle}>Discover</h1>
-          <p style={styles.location}>📍 London, UK</p>
+        <div style={styles.topBarLeft}>
+          <Logo size="md" dark={true} />
+          <span style={styles.locationPill}>📍 London, UK</span>
         </div>
         <button style={styles.swipeModeBtn} onClick={() => setSwipeMode(true)}>
-          🎾 Swipe Mode
+          Swipe Mode
         </button>
       </div>
 
+      {/* Page title */}
+      <h1 style={styles.pageTitle}>Discover</h1>
+      <p style={styles.pageSubtitle}>Find players, coaches and venues near you</p>
+
+      {/* Search */}
       <div style={styles.searchBar}>
-        <span style={styles.searchIcon}>🔍</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9aa0ac" strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
         <input
           style={styles.searchInput}
           placeholder="Search by name, location or level..."
@@ -62,6 +69,7 @@ function Discovery() {
         )}
       </div>
 
+      {/* Filters */}
       <div style={styles.filterRow}>
         {filters.map(f => (
           <button
@@ -70,7 +78,7 @@ function Discovery() {
               ...styles.filterBtn,
               backgroundColor: filter === f.id ? theme.colors.primary : 'white',
               color: filter === f.id ? theme.colors.accent : theme.colors.gray600,
-              border: filter === f.id ? `2px solid ${theme.colors.primary}` : '2px solid #e0e4ea',
+              border: filter === f.id ? `1.5px solid ${theme.colors.primary}` : '1.5px solid #e0e4ea',
               transition: 'all 0.15s ease',
             }}
             onClick={() => setFilter(f.id)}
@@ -84,11 +92,11 @@ function Discovery() {
         {filtered.length} result{filtered.length !== 1 ? 's' : ''} near you
       </p>
 
+      {/* Cards */}
       <div style={styles.feed}>
         {filtered.length === 0 ? (
           <div style={styles.noResults}>
-            <span style={styles.noResultsEmoji}>🔍</span>
-            <p style={styles.noResultsText}>No results found for "{search}"</p>
+            <p style={styles.noResultsText}>No results for "{search}"</p>
             <button style={styles.clearBtn} onClick={() => setSearch('')}>Clear Search</button>
           </div>
         ) : (
@@ -111,7 +119,7 @@ function Discovery() {
                 <div style={styles.cardInfo}>
                   <div style={styles.cardNameRow}>
                     <h3 style={styles.cardName}>{user.name}</h3>
-                    <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '18', color: roleColors[user.role] }}>
+                    <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '15', color: roleColors[user.role] }}>
                       {roleLabels[user.role]}
                     </span>
                   </div>
@@ -146,53 +154,66 @@ const styles = {
     alignItems: 'center',
     marginBottom: '20px',
   },
-  pageTitle: {
-    fontSize: '24px',
-    fontWeight: '800',
-    color: '#0a1628',
-    margin: '0 0 4px 0',
+  topBarLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
-  location: {
+  locationPill: {
+    fontSize: '11px',
     color: '#9aa0ac',
-    fontSize: '13px',
-    margin: '0',
+    fontWeight: '400',
+    letterSpacing: '0.3px',
   },
   swipeModeBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
-    padding: '10px 16px',
+    padding: '9px 16px',
     borderRadius: '999px',
     border: 'none',
-    fontSize: '13px',
-    fontWeight: '800',
+    fontSize: '12px',
+    fontWeight: '600',
     cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    boxShadow: '0 4px 12px rgba(10,22,40,0.2)',
+    letterSpacing: '0.3px',
+    boxShadow: '0 4px 12px rgba(10,22,40,0.18)',
+  },
+  pageTitle: {
+    fontSize: '26px',
+    fontWeight: '300',
+    color: '#0a1628',
+    margin: '0 0 4px 0',
+    letterSpacing: '-0.5px',
+  },
+  pageSubtitle: {
+    fontSize: '13px',
+    color: '#9aa0ac',
+    margin: '0 0 20px 0',
+    fontWeight: '400',
   },
   searchBar: {
     backgroundColor: 'white',
-    borderRadius: '14px',
+    borderRadius: '12px',
     display: 'flex',
     alignItems: 'center',
-    padding: '12px 16px',
+    padding: '11px 14px',
     gap: '10px',
-    boxShadow: '0 2px 8px rgba(10,22,40,0.06)',
-    marginBottom: '16px',
+    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+    marginBottom: '14px',
   },
-  searchIcon: { fontSize: '16px' },
   searchInput: {
     border: 'none',
     outline: 'none',
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#0a1628',
     flex: 1,
     backgroundColor: 'transparent',
+    fontWeight: '400',
   },
   clearSearch: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#9aa0ac',
     cursor: 'pointer',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   filterRow: {
     display: 'flex',
@@ -201,48 +222,49 @@ const styles = {
     flexWrap: 'wrap',
   },
   filterBtn: {
-    padding: '8px 18px',
+    padding: '7px 16px',
     borderRadius: '999px',
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer',
-    fontWeight: '700',
+    fontWeight: '500',
+    letterSpacing: '0.2px',
   },
   resultsCount: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#9aa0ac',
     margin: '0 0 12px 0',
-    fontWeight: '600',
+    fontWeight: '400',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '1px',
   },
   feed: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '16px',
+    gap: '14px',
   },
   card: {
     backgroundColor: 'white',
-    borderRadius: '16px',
+    borderRadius: '14px',
     padding: '18px',
-    boxShadow: '0 2px 12px rgba(10,22,40,0.07)',
+    boxShadow: '0 2px 10px rgba(10,22,40,0.06)',
     cursor: 'pointer',
   },
   cardTop: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    marginBottom: '12px',
+    marginBottom: '10px',
   },
   avatar: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '14px',
+    width: '46px',
+    height: '46px',
+    borderRadius: '12px',
     color: 'white',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '20px',
-    fontWeight: '800',
+    fontSize: '18px',
+    fontWeight: '600',
     flexShrink: 0,
   },
   cardInfo: { flex: 1 },
@@ -255,44 +277,48 @@ const styles = {
   },
   cardName: {
     margin: '0',
-    fontSize: '15px',
-    fontWeight: '700',
+    fontSize: '14px',
+    fontWeight: '600',
     color: '#0a1628',
+    letterSpacing: '-0.2px',
   },
   roleBadge: {
-    fontSize: '11px',
+    fontSize: '10px',
     padding: '2px 8px',
     borderRadius: '999px',
-    fontWeight: '700',
+    fontWeight: '500',
+    letterSpacing: '0.3px',
   },
   cardMeta: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
   },
-  metaItem: { fontSize: '12px', color: '#9aa0ac' },
-  metaDot: { color: '#9aa0ac' },
+  metaItem: { fontSize: '11px', color: '#9aa0ac' },
+  metaDot: { color: '#e0e4ea' },
   cardBio: {
-    fontSize: '13px',
+    fontSize: '12.5px',
     color: '#5a6270',
-    margin: '0 0 14px 0',
-    lineHeight: '1.5',
+    margin: '0 0 12px 0',
+    lineHeight: '1.6',
+    fontWeight: '400',
   },
   cardFooter: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  availability: { fontSize: '12px', color: '#9aa0ac' },
+  availability: { fontSize: '11px', color: '#9aa0ac' },
   connectBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
-    padding: '8px 18px',
+    padding: '7px 16px',
     borderRadius: '999px',
     border: 'none',
-    fontSize: '13px',
-    fontWeight: '800',
+    fontSize: '12px',
+    fontWeight: '600',
     cursor: 'pointer',
+    letterSpacing: '0.2px',
   },
   noResults: {
     gridColumn: '1 / -1',
@@ -302,16 +328,15 @@ const styles = {
     padding: '60px 20px',
     gap: '12px',
   },
-  noResultsEmoji: { fontSize: '48px' },
-  noResultsText: { fontSize: '15px', color: '#9aa0ac', margin: '0' },
+  noResultsText: { fontSize: '14px', color: '#9aa0ac', margin: '0', fontWeight: '400' },
   clearBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
-    padding: '10px 24px',
+    padding: '9px 22px',
     borderRadius: '999px',
     border: 'none',
-    fontSize: '13px',
-    fontWeight: '800',
+    fontSize: '12px',
+    fontWeight: '600',
     cursor: 'pointer',
   },
 };

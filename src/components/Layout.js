@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import Logo from './Logo';
 
 function Layout({ children }) {
   const navigate = useNavigate();
@@ -13,16 +14,23 @@ function Layout({ children }) {
   }, []);
 
   const navItems = [
-    { path: '/discovery', icon: '🔍', label: 'Discover' },
-    { path: '/messages', icon: '💬', label: 'Messages' },
-    { path: '/profile', icon: '👤', label: 'Profile' },
+    {
+      path: '/discovery', label: 'Discover',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+    },
+    {
+      path: '/messages', label: 'Messages',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+    },
+    {
+      path: '/profile', label: 'Profile',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    },
   ];
 
-  const isActive = (path) => location.pathname === path;
-
-  // Pages that don't show navigation
-  const noNavPages = ['/', '/login', '/signup/player', '/signup/coach', '/signup/venue'];
+  const noNavPages = ['/', '/login'];
   const showNav = !noNavPages.includes(location.pathname) && !location.pathname.startsWith('/signup');
+  const isActive = (path) => location.pathname === path;
 
   if (!showNav) return <div>{children}</div>;
 
@@ -32,9 +40,8 @@ function Layout({ children }) {
 
         {/* SIDEBAR */}
         <div style={styles.sidebar}>
-          <div style={styles.sidebarLogo} onClick={() => navigate('/discovery')}>
-            <span style={styles.logoIcon}>🎾</span>
-            <span style={styles.logoText}>Tennis<br/>Connect</span>
+          <div style={styles.sidebarLogoArea} onClick={() => navigate('/discovery')}>
+            <Logo size="md" dark={false} />
           </div>
 
           <nav style={styles.sidebarNav}>
@@ -43,16 +50,18 @@ function Layout({ children }) {
                 key={item.path}
                 style={{
                   ...styles.sidebarNavItem,
-                  backgroundColor: isActive(item.path) ? 'rgba(200,255,0,0.1)' : 'transparent',
-                  borderLeft: isActive(item.path) ? '3px solid #c8ff00' : '3px solid transparent',
+                  backgroundColor: isActive(item.path) ? 'rgba(200,255,0,0.08)' : 'transparent',
+                  borderLeft: isActive(item.path) ? '2px solid #c8ff00' : '2px solid transparent',
                 }}
                 onClick={() => navigate(item.path)}
               >
-                <span style={styles.sidebarNavIcon}>{item.icon}</span>
+                <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.4)' }}>
+                  {item.icon}
+                </span>
                 <span style={{
                   ...styles.sidebarNavLabel,
-                  color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.6)',
-                  fontWeight: isActive(item.path) ? '700' : '400',
+                  color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.55)',
+                  fontWeight: isActive(item.path) ? '600' : '400',
                 }}>
                   {item.label}
                 </span>
@@ -91,16 +100,14 @@ function Layout({ children }) {
       {children}
       <div style={styles.bottomNav}>
         {navItems.map(item => (
-          <div
-            key={item.path}
-            style={styles.navItem}
-            onClick={() => navigate(item.path)}
-          >
-            <span style={styles.navIcon}>{item.icon}</span>
+          <div key={item.path} style={styles.navItem} onClick={() => navigate(item.path)}>
+            <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)' }}>
+              {item.icon}
+            </span>
             <span style={{
               ...styles.navLabel,
-              color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.4)',
-              fontWeight: isActive(item.path) ? 'bold' : 'normal',
+              color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)',
+              fontWeight: isActive(item.path) ? '600' : '400',
             }}>
               {item.label}
             </span>
@@ -112,115 +119,97 @@ function Layout({ children }) {
 }
 
 const styles = {
-  // DESKTOP
   desktopWrapper: {
     display: 'flex',
     minHeight: '100vh',
     backgroundColor: '#f4f6f8',
   },
   sidebar: {
-    width: '260px',
+    width: '240px',
     minHeight: '100vh',
     background: 'linear-gradient(180deg, #0a1628 0%, #1a2d4a 100%)',
     display: 'flex',
     flexDirection: 'column',
     position: 'fixed',
-    top: 0,
-    left: 0,
-    bottom: 0,
+    top: 0, left: 0, bottom: 0,
     zIndex: 100,
   },
-  sidebarLogo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '28px 24px',
+  sidebarLogoArea: {
+    padding: '28px 20px 24px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
     cursor: 'pointer',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-    marginBottom: '16px',
-  },
-  logoIcon: {
-    fontSize: '32px',
-  },
-  logoText: {
-    color: 'white',
-    fontSize: '16px',
-    fontWeight: '800',
-    lineHeight: '1.2',
-    letterSpacing: '-0.3px',
   },
   sidebarNav: {
     flex: 1,
-    padding: '8px 12px',
+    padding: '16px 10px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   sidebarNavItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
-    padding: '13px 16px',
-    borderRadius: '12px',
+    gap: '12px',
+    padding: '11px 14px',
+    borderRadius: '10px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
   },
-  sidebarNavIcon: {
-    fontSize: '20px',
-  },
   sidebarNavLabel: {
-    fontSize: '15px',
-    letterSpacing: '0.2px',
+    fontSize: '14px',
+    letterSpacing: '0.1px',
   },
   sidebarFooter: {
-    padding: '20px',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
+    padding: '18px',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '12px',
   },
   sidebarProfile: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '10px',
   },
   sidebarAvatar: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '12px',
+    width: '36px',
+    height: '36px',
+    borderRadius: '10px',
     backgroundColor: '#c8ff00',
     color: '#0a1628',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '18px',
-    fontWeight: '800',
+    fontSize: '16px',
+    fontWeight: '700',
     flexShrink: 0,
   },
   sidebarName: {
     color: 'white',
-    fontSize: '14px',
-    fontWeight: '700',
+    fontSize: '13px',
+    fontWeight: '600',
     margin: '0 0 2px 0',
   },
   sidebarPlan: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: '12px',
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: '11px',
     margin: '0',
+    fontWeight: '400',
   },
   upgradeBtn: {
     backgroundColor: '#c8ff00',
     color: '#0a1628',
-    padding: '10px',
+    padding: '9px',
     borderRadius: '10px',
     border: 'none',
-    fontSize: '13px',
-    fontWeight: '800',
+    fontSize: '12px',
+    fontWeight: '700',
     cursor: 'pointer',
     width: '100%',
+    letterSpacing: '0.2px',
   },
   desktopMain: {
-    marginLeft: '260px',
+    marginLeft: '240px',
     flex: 1,
     minHeight: '100vh',
     backgroundColor: '#f4f6f8',
@@ -228,16 +217,14 @@ const styles = {
   desktopContent: {
     maxWidth: '900px',
     margin: '0 auto',
-    padding: '32px 32px',
+    padding: '32px',
   },
-
-  // MOBILE
   mobileWrapper: {
     maxWidth: '480px',
     margin: '0 auto',
     backgroundColor: '#f4f6f8',
     minHeight: '100vh',
-    paddingBottom: '80px',
+    paddingBottom: '72px',
   },
   bottomNav: {
     position: 'fixed',
@@ -247,7 +234,7 @@ const styles = {
     background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
     display: 'flex',
     justifyContent: 'space-around',
-    padding: '12px 0 16px 0',
+    padding: '10px 0 14px 0',
     zIndex: 100,
   },
   navItem: {
@@ -257,13 +244,10 @@ const styles = {
     cursor: 'pointer',
     gap: '3px',
   },
-  navIcon: {
-    fontSize: '22px',
-  },
   navLabel: {
     fontSize: '10px',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.8px',
   },
 };
 
