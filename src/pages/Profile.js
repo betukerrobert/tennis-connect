@@ -1,65 +1,202 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { theme } from '../theme';
+import { supabase } from '../supabase';
+import { roleColors, roleLabels } from '../theme';
 
 function Profile() {
   const navigate = useNavigate();
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({});
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { navigate('/'); return; }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+    } else {
+      setProfile(data);
+      setForm(data);
+    }
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: form.full_name,
+        bio: form.bio,
+        location: form.location,
+        level: form.level,
+        availability: form.availability,
+        play_style: form.play_style,
+      })
+      .eq('id', profile.id);
+
+    if (!error) {
+      setProfile({ ...profile, ...form });
+      setEditing(false);
+    }
+    setSaving(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
+
+  if (loading) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.loadingSpinner} />
+        <p style={styles.loadingText}>Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div style={styles.loadingContainer}>
+        <p style={styles.loadingText}>Profile not found.</p>
+      </div>
+    );
+  }
+
+  const accentColor = roleColors[profile.role] || '#0a1628';
+  const initials = profile.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
 
   return (
     <div style={styles.container}>
 
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>My Profile</h1>
-        <span style={styles.editBtn}>Edit ✏️</span>
+        <span style={styles.editBtn} onClick={() => editing ? handleSave() : setEditing(true)}>
+          {saving ? 'Saving...' : editing ? 'Save ✓' : 'Edit ✏️'}
+        </span>
       </div>
 
       <div style={styles.profileHero}>
-        <div style={styles.avatarLarge}>R</div>
-        <h2 style={styles.name}>Robert</h2>
-        <span style={styles.roleBadge}>🎾 Player</span>
-        <p style={styles.location}>📍 London, UK</p>
+        <div style={{ ...styles.avatarLarge, backgroundColor: accentColor }}>
+          {initials}
+        </div>
+
+        {editing ? (
+          <input
+            style={styles.editInput}
+            value={form.full_name || ''}
+            onChange={e => setForm({ ...form, full_name: e.target.value })}
+            placeholder="Your full name"
+          />
+        ) : (
+          <h2 style={styles.name}>{profile.full_name || 'No name set'}</h2>
+        )}
+
+        <span style={{ ...styles.roleBadge, backgroundColor: accentColor + '25', color: accentColor, border: `1px solid ${accentColor}40` }}>
+          {roleLabels[profile.role] || 'Member'}
+        </span>
+
+        {editing ? (
+          <input
+            style={styles.editInput}
+            value={form.location || ''}
+            onChange={e => setForm({ ...form, location: e.target.value })}
+            placeholder="Your location"
+          />
+        ) : (
+          <p style={styles.location}>📍 {profile.location || 'No location set'}</p>
+        )}
       </div>
 
       <div style={styles.statsRow}>
         <div style={styles.statItem}>
-          <span style={styles.statValue}>12</span>
+          <span style={styles.statValue}>0</span>
           <span style={styles.statLabel}>Connections</span>
         </div>
         <div style={styles.statDivider} />
         <div style={styles.statItem}>
-          <span style={styles.statValue}>4.8</span>
-          <span style={styles.statLabel}>Rating</span>
+          <span style={styles.statValue}>New</span>
+          <span style={styles.statLabel}>Member</span>
         </div>
         <div style={styles.statDivider} />
         <div style={styles.statItem}>
-          <span style={styles.statValue}>3</span>
-          <span style={styles.statLabel}>Sessions</span>
+          <span style={styles.statValue}>Free</span>
+          <span style={styles.statLabel}>Plan</span>
         </div>
       </div>
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>About</h3>
-        <p style={styles.bio}>
-          Passionate tennis player looking for hitting partners and coaches.
-          Play 3-4 times per week. Love competitive matches!
-        </p>
+        {editing ? (
+          <textarea
+            style={styles.editTextarea}
+            value={form.bio || ''}
+            onChange={e => setForm({ ...form, bio: e.target.value })}
+            placeholder="Tell others about yourself..."
+            rows={3}
+          />
+        ) : (
+          <p style={styles.bio}>
+            {profile.bio || 'No bio yet — tap Edit to add one!'}
+          </p>
+        )}
       </div>
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Details</h3>
         <div style={styles.detailsGrid}>
           {[
-            { label: 'Level', value: 'Intermediate' },
-            { label: 'Availability', value: 'Weekends' },
-            { label: 'Play Style', value: 'Baseline' },
-            { label: 'Member Since', value: 'Feb 2026' },
+            { label: 'Level', key: 'level', placeholder: 'e.g. Intermediate' },
+            { label: 'Availability', key: 'availability', placeholder: 'e.g. Weekends' },
+            { label: 'Play Style', key: 'play_style', placeholder: 'e.g. Baseline' },
           ].map(d => (
-            <div key={d.label} style={styles.detailItem}>
+            <div key={d.key} style={styles.detailItem}>
               <span style={styles.detailLabel}>{d.label}</span>
-              <span style={styles.detailValue}>{d.value}</span>
+              {editing ? (
+                <input
+                  style={styles.detailEditInput}
+                  value={form[d.key] || ''}
+                  onChange={e => setForm({ ...form, [d.key]: e.target.value })}
+                  placeholder={d.placeholder}
+                />
+              ) : (
+                <span style={styles.detailValue}>{profile[d.key] || '—'}</span>
+              )}
             </div>
           ))}
+          <div style={styles.detailItem}>
+            <span style={styles.detailLabel}>Member Since</span>
+            <span style={styles.detailValue}>
+              {new Date(profile.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+            </span>
+          </div>
         </div>
       </div>
+
+      {editing && (
+        <div style={styles.section}>
+          <button style={styles.cancelBtn} onClick={() => { setEditing(false); setForm(profile); }}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       <div style={styles.section}>
         <div style={styles.subscriptionCard}>
@@ -75,24 +212,9 @@ function Profile() {
       </div>
 
       <div style={styles.section}>
-        <button style={styles.logoutBtn} onClick={() => navigate('/')}>
+        <button style={styles.logoutBtn} onClick={handleLogout}>
           Log Out
         </button>
-      </div>
-
-      <div style={styles.bottomNav}>
-        <div style={styles.navItem} onClick={() => navigate('/discovery')}>
-          <span style={styles.navIcon}>🔍</span>
-          <span style={styles.navLabel}>Discover</span>
-        </div>
-        <div style={styles.navItem} onClick={() => navigate('/messages')}>
-          <span style={styles.navIcon}>💬</span>
-          <span style={styles.navLabel}>Messages</span>
-        </div>
-        <div style={styles.navItem}>
-          <span style={styles.navIcon}>👤</span>
-          <span style={styles.navLabelActive}>Profile</span>
-        </div>
       </div>
 
     </div>
@@ -102,81 +224,114 @@ function Profile() {
 const styles = {
   container: {
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
-    maxWidth: '480px',
-    margin: '0 auto',
-    backgroundColor: '#f4f6f8',
-    minHeight: '100vh',
-    paddingBottom: '80px',
+    paddingBottom: '20px',
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60vh',
+    gap: '16px',
+  },
+  loadingSpinner: {
+    width: '32px',
+    height: '32px',
+    border: '3px solid #e0e4ea',
+    borderTop: '3px solid #0a1628',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  loadingText: {
+    fontSize: '13px',
+    color: '#9aa0ac',
+    fontWeight: '400',
   },
   header: {
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    padding: '20px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: '20px',
   },
   headerTitle: {
-    color: 'white',
-    fontSize: '18px',
-    fontWeight: '800',
+    fontSize: '24px',
+    fontWeight: '300',
+    color: '#0a1628',
     margin: '0',
+    letterSpacing: '-0.5px',
   },
   editBtn: {
-    color: '#c8ff00',
+    color: '#0a1628',
     fontSize: '13px',
     cursor: 'pointer',
-    fontWeight: '700',
+    fontWeight: '600',
+    backgroundColor: '#f4f6f8',
+    padding: '6px 14px',
+    borderRadius: '999px',
+    border: '1.5px solid #e0e4ea',
   },
   profileHero: {
     background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    padding: '0 20px 32px 20px',
+    borderRadius: '20px',
+    padding: '28px 20px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
+    marginBottom: '16px',
   },
   avatarLarge: {
-    width: '84px',
-    height: '84px',
-    borderRadius: '24px',
-    backgroundColor: '#c8ff00',
-    color: '#0a1628',
+    width: '76px',
+    height: '76px',
+    borderRadius: '20px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '38px',
-    fontWeight: '800',
+    fontSize: '28px',
+    fontWeight: '600',
+    color: 'white',
     marginBottom: '4px',
   },
   name: {
     margin: '0',
-    fontSize: '24px',
-    fontWeight: '800',
+    fontSize: '22px',
+    fontWeight: '600',
     color: 'white',
+    letterSpacing: '-0.3px',
   },
   roleBadge: {
-    backgroundColor: 'rgba(200,255,0,0.15)',
-    color: '#c8ff00',
-    fontSize: '12px',
+    fontSize: '11px',
     padding: '4px 12px',
     borderRadius: '999px',
-    fontWeight: '700',
-    border: '1px solid rgba(200,255,0,0.3)',
+    fontWeight: '500',
+    letterSpacing: '0.5px',
   },
   location: {
     margin: '0',
-    fontSize: '13px',
-    color: 'rgba(255,255,255,0.5)',
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '400',
+  },
+  editInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    fontSize: '14px',
+    color: 'white',
+    outline: 'none',
+    width: '80%',
+    textAlign: 'center',
   },
   statsRow: {
     backgroundColor: 'white',
-    margin: '16px',
-    borderRadius: '16px',
+    borderRadius: '14px',
     padding: '16px',
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
-    boxShadow: '0 2px 12px rgba(10,22,40,0.07)',
+    boxShadow: '0 2px 10px rgba(10,22,40,0.06)',
+    marginBottom: '16px',
   },
   statItem: {
     display: 'flex',
@@ -185,15 +340,17 @@ const styles = {
     gap: '4px',
   },
   statValue: {
-    fontSize: '22px',
-    fontWeight: '800',
+    fontSize: '20px',
+    fontWeight: '600',
     color: '#0a1628',
+    letterSpacing: '-0.3px',
   },
   statLabel: {
-    fontSize: '11px',
+    fontSize: '10px',
     color: '#9aa0ac',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.8px',
+    fontWeight: '400',
   },
   statDivider: {
     width: '1px',
@@ -201,25 +358,38 @@ const styles = {
     backgroundColor: '#e0e4ea',
   },
   section: {
-    padding: '0 16px 16px 16px',
+    marginBottom: '16px',
   },
   sectionTitle: {
-    fontSize: '13px',
-    fontWeight: '700',
+    fontSize: '11px',
+    fontWeight: '600',
     color: '#9aa0ac',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '1px',
     margin: '0 0 10px 0',
   },
   bio: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: '#5a6270',
     lineHeight: '1.6',
     backgroundColor: 'white',
     padding: '14px',
-    borderRadius: '14px',
+    borderRadius: '12px',
     margin: '0',
     boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+    fontWeight: '400',
+  },
+  editTextarea: {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: '12px',
+    border: '1.5px solid #e0e4ea',
+    fontSize: '13px',
+    color: '#0a1628',
+    outline: 'none',
+    resize: 'none',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    boxSizing: 'border-box',
   },
   detailsGrid: {
     display: 'grid',
@@ -228,8 +398,8 @@ const styles = {
   },
   detailItem: {
     backgroundColor: 'white',
-    borderRadius: '14px',
-    padding: '14px',
+    borderRadius: '12px',
+    padding: '12px 14px',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -239,16 +409,39 @@ const styles = {
     fontSize: '10px',
     color: '#9aa0ac',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.8px',
+    fontWeight: '500',
   },
   detailValue: {
-    fontSize: '15px',
-    fontWeight: '700',
+    fontSize: '14px',
+    fontWeight: '600',
     color: '#0a1628',
+    letterSpacing: '-0.2px',
+  },
+  detailEditInput: {
+    border: 'none',
+    borderBottom: '1.5px solid #e0e4ea',
+    padding: '4px 0',
+    fontSize: '13px',
+    color: '#0a1628',
+    outline: 'none',
+    backgroundColor: 'transparent',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  },
+  cancelBtn: {
+    width: '100%',
+    backgroundColor: 'transparent',
+    color: '#9aa0ac',
+    padding: '13px',
+    borderRadius: '12px',
+    border: '1.5px solid #e0e4ea',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
   },
   subscriptionCard: {
     backgroundColor: '#0a1628',
-    borderRadius: '16px',
+    borderRadius: '14px',
     padding: '16px',
     display: 'flex',
     justifyContent: 'space-between',
@@ -259,72 +452,39 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
   },
-  planIconBox: {
-    fontSize: '24px',
-  },
+  planIconBox: { fontSize: '22px' },
   planName: {
     margin: '0 0 2px 0',
-    fontWeight: '700',
-    fontSize: '15px',
+    fontWeight: '600',
+    fontSize: '14px',
     color: 'white',
   },
   planDesc: {
     margin: '0',
-    fontSize: '12px',
-    color: 'rgba(255,255,255,0.5)',
+    fontSize: '11px',
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '400',
   },
   upgradeBtn: {
     backgroundColor: '#c8ff00',
     color: '#0a1628',
-    padding: '9px 18px',
+    padding: '8px 16px',
     borderRadius: '999px',
     border: 'none',
-    fontSize: '13px',
-    fontWeight: '800',
+    fontSize: '12px',
+    fontWeight: '700',
     cursor: 'pointer',
   },
   logoutBtn: {
     width: '100%',
     backgroundColor: 'transparent',
     color: '#ef4444',
-    padding: '14px',
-    borderRadius: '14px',
-    border: '2px solid #ef4444',
-    fontSize: '15px',
-    fontWeight: '700',
+    padding: '13px',
+    borderRadius: '12px',
+    border: '1.5px solid #ef444440',
+    fontSize: '13px',
+    fontWeight: '500',
     cursor: 'pointer',
-  },
-  bottomNav: {
-    position: 'fixed',
-    bottom: '0',
-    width: '100%',
-    maxWidth: '480px',
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    display: 'flex',
-    justifyContent: 'space-around',
-    padding: '12px 0 16px 0',
-    zIndex: 100,
-  },
-  navItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    cursor: 'pointer',
-    gap: '3px',
-  },
-  navIcon: { fontSize: '22px' },
-  navLabel: {
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  navLabelActive: {
-    fontSize: '10px',
-    color: '#c8ff00',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    fontWeight: 'bold',
   },
 };
 
