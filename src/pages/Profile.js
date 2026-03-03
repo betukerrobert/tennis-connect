@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { roleColors, roleLabels } from '../theme';
@@ -9,7 +9,9 @@ function Profile() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({});
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchProfile();
@@ -56,6 +58,41 @@ function Profile() {
     setSaving(false);
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !profile) return;
+
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const filePath = `${profile.id}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('Avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('Avatars')
+        .getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: urlData.publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      setProfile(prev => ({ ...prev, avatar_url: urlData.publicUrl }));
+      setForm(prev => ({ ...prev, avatar_url: urlData.publicUrl }));
+    } catch (err) {
+      console.error('Upload error:', err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
@@ -94,8 +131,26 @@ function Profile() {
       </div>
 
       <div style={styles.profileHero}>
-        <div style={{ ...styles.avatarLarge, backgroundColor: accentColor }}>
-          {initials}
+
+        {/* Avatar with upload on tap */}
+        <div style={styles.avatarWrapper} onClick={() => fileInputRef.current.click()}>
+          {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt="avatar" style={styles.avatarPhoto} />
+          ) : (
+            <div style={{ ...styles.avatarLarge, backgroundColor: accentColor }}>
+              {initials}
+            </div>
+          )}
+          <div style={styles.avatarOverlay}>
+            {uploading ? '⏳' : '📷'}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarUpload}
+          />
         </div>
 
         {editing ? (
@@ -280,6 +335,11 @@ const styles = {
     gap: '8px',
     marginBottom: '16px',
   },
+  avatarWrapper: {
+    position: 'relative',
+    cursor: 'pointer',
+    marginBottom: '4px',
+  },
   avatarLarge: {
     width: '76px',
     height: '76px',
@@ -290,7 +350,25 @@ const styles = {
     fontSize: '28px',
     fontWeight: '600',
     color: 'white',
-    marginBottom: '4px',
+  },
+  avatarPhoto: {
+    width: '76px',
+    height: '76px',
+    borderRadius: '20px',
+    objectFit: 'cover',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    bottom: '-4px',
+    right: '-4px',
+    backgroundColor: '#c8ff00',
+    borderRadius: '50%',
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
   },
   name: {
     margin: '0',
