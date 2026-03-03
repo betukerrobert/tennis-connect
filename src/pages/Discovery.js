@@ -4,6 +4,25 @@ import SwipeMode from '../components/SwipeMode';
 import Logo from '../components/Logo';
 import { supabase } from '../supabase';
 
+// ── Haversine formula — calculates distance in km between two coordinates ──
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(km) {
+  if (km < 1) return `${Math.round(km * 1000)} m away`;
+  if (km < 10) return `${km.toFixed(1)} km away`;
+  return `${Math.round(km)} km away`;
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 function Discovery() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -12,15 +31,26 @@ function Discovery() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
 
   useEffect(() => {
-    fetchUsers();
     fetchCurrentUser();
+    fetchUsers();
   }, []);
 
   const fetchCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
     setCurrentUser(user);
+
+    // Get my profile so we have my lat/lng for distance calculations
+    const { data } = await supabase
+      .from('profiles')
+      .select('latitude, longitude')
+      .eq('id', user.id)
+      .single();
+
+    if (data) setMyProfile(data);
   };
 
   const fetchUsers = async () => {
@@ -40,16 +70,40 @@ function Discovery() {
 
   if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} users={users} />;
 
-  // Filter out current user from feed
-  const filtered = users.filter(u => {
-    if (currentUser && u.id === currentUser.id) return false;
-    const matchesFilter = filter === 'all' || u.role === filter;
-    const matchesSearch = search === '' ||
-      (u.full_name && u.full_name.toLowerCase().includes(search.toLowerCase())) ||
-      (u.location && u.location.toLowerCase().includes(search.toLowerCase())) ||
-      (u.level && u.level.toLowerCase().includes(search.toLowerCase()));
-    return matchesFilter && matchesSearch;
-  });
+  // Filter out current user, apply role + search filters
+  const filtered = users
+    .filter(u => {
+      if (currentUser && u.id === currentUser.id) return false;
+      const matchesFilter = filter === 'all' || u.role === filter;
+      const matchesSearch = search === '' ||
+        (u.full_name && u.full_name.toLowerCase().includes(search.toLowerCase())) ||
+        (u.location && u.location.toLowerCase().includes(search.toLowerCase())) ||
+        (u.level && u.level.toLowerCase().includes(search.toLowerCase()));
+      return matchesFilter && matchesSearch;
+    })
+    .map(u => {
+      // Attach distance if both users have coordinates
+      if (
+        myProfile?.latitude && myProfile?.longitude &&
+        u.latitude && u.longitude
+      ) {
+        const km = getDistanceKm(myProfile.latitude, myProfile.longitude, u.latitude, u.longitude);
+        return { ...u, distanceKm: km };
+      }
+      return { ...u, distanceKm: null };
+    })
+    .sort((a, b) => {
+      // Sort by distance if available, otherwise keep original order
+      if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+      if (a.distanceKm !== null) return -1;
+      if (b.distanceKm !== null) return 1;
+      return 0;
+    });
+
+  // Show real city from location field if available, else fallback
+  const locationLabel = myProfile
+    ? null // we'll show nothing until we have a name
+    : null;
 
   const filters = [
     { id: 'all', label: 'All' },
@@ -64,7 +118,10 @@ function Discovery() {
       <div style={styles.topBar}>
         <div style={styles.topBarLeft}>
           <Logo size="md" dark={true} />
-          <span style={styles.locationPill}>📍 London, UK</span>
+          {myProfile?.latitude
+            ? <span style={styles.locationPill}>📍 Location active</span>
+            : <span style={styles.locationPill}>📍 Enable location for nearby results</span>
+          }
         </div>
         <button style={styles.swipeModeBtn} onClick={() => setSwipeMode(true)}>
           Swipe Mode
@@ -148,9 +205,13 @@ function Discovery() {
                   onMouseLeave={() => setPressed(null)}
                 >
                   <div style={styles.cardTop}>
-                    <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] || '#0a1628' }}>
-                      {user.full_name ? user.full_name.charAt(0).toUpperCase() : '?'}
-                    </div>
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt="avatar" style={styles.avatarPhoto} />
+                    ) : (
+                      <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] || '#0a1628' }}>
+                        {user.full_name ? user.full_name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                    )}
                     <div style={styles.cardInfo}>
                       <div style={styles.cardNameRow}>
                         <h3 style={styles.cardName}>{user.full_name || 'Unknown'}</h3>
@@ -161,7 +222,12 @@ function Discovery() {
                         )}
                       </div>
                       <div style={styles.cardMeta}>
-                        {user.location && <span style={styles.metaItem}>📍 {user.location}</span>}
+                        {user.distanceKm !== null
+                          ? <span style={styles.metaItem}>📍 {formatDistance(user.distanceKm)}</span>
+                          : user.location
+                            ? <span style={styles.metaItem}>📍 {user.location}</span>
+                            : null
+                        }
                         {user.level && <>
                           <span style={styles.metaDot}>·</span>
                           <span style={styles.metaItem}>⭐ {user.level}</span>
@@ -323,6 +389,13 @@ const styles = {
     justifyContent: 'center',
     fontSize: '18px',
     fontWeight: '600',
+    flexShrink: 0,
+  },
+  avatarPhoto: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '12px',
+    objectFit: 'cover',
     flexShrink: 0,
   },
   cardInfo: { flex: 1 },

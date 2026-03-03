@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Logo from './Logo';
+import { supabase } from '../supabase';
 
 function Layout({ children }) {
   const navigate = useNavigate();
@@ -12,6 +13,33 @@ function Layout({ children }) {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // ── Silently update user's location in the background ────────────────
+  useEffect(() => {
+    const updateLocation = async () => {
+      if (!navigator.geolocation) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await supabase
+            .from('profiles')
+            .update({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+            })
+            .eq('id', user.id);
+        },
+        (err) => console.log('Location not available:', err.message),
+        { timeout: 10000 }
+      );
+    };
+
+    updateLocation();
+  }, []); // runs once when Layout mounts
+  // ─────────────────────────────────────────────────────────────────────
 
   const navItems = [
     {
