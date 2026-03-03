@@ -1,20 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
-import tennisBg from '../assets/14507181_3840_2160_25fps.mp4';
+
+const tennisBg = 'https://www.pexels.com/download/video/34230186/';
 
 // Player → clean tennis racket, 4 strokes
 const PlayerIcon = ({ color }) => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Racket head */}
     <ellipse cx="11" cy="10" rx="7" ry="8.5" stroke={color} strokeWidth="1.6" fill="none"/>
-    {/* Horizontal string */}
     <line x1="4.2" y1="10" x2="17.8" y2="10" stroke={color} strokeWidth="1" opacity="0.5"/>
-    {/* Vertical string */}
     <line x1="11" y1="1.8" x2="11" y2="18.2" stroke={color} strokeWidth="1" opacity="0.5"/>
-    {/* Handle */}
     <line x1="15.5" y1="16.5" x2="22" y2="23" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
-    {/* Grip end */}
     <circle cx="22.5" cy="23.5" r="1" fill={color}/>
   </svg>
 );
@@ -22,30 +18,22 @@ const PlayerIcon = ({ color }) => (
 // Coach → whistle, 3 strokes
 const CoachIcon = ({ color }) => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Whistle body */}
     <path
       d="M5 14 C5 10 8 7 12 7 L19 7 C20.1 7 21 7.9 21 9 L21 11 C21 12.1 20.1 13 19 13 L12 13 C10 13 8.5 14.5 8.5 16.5 C8.5 18.8 6.5 20.5 4.5 19.5 C3 18.8 3 16 5 14 Z"
       stroke={color} strokeWidth="1.6" fill="none" strokeLinejoin="round"
     />
-    {/* Air hole on body */}
     <circle cx="15.5" cy="10" r="1.2" stroke={color} strokeWidth="1.2" fill="none"/>
-    {/* Mouthpiece */}
     <line x1="21" y1="10" x2="24" y2="10" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
   </svg>
 );
 
-// Venue → tennis court top-down (kept as Robert liked it)
+// Venue → tennis court top-down
 const VenueIcon = ({ color }) => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Court outline */}
     <rect x="2" y="4" width="22" height="18" rx="0.8" stroke={color} strokeWidth="1.6" fill="none"/>
-    {/* Net — center vertical */}
     <line x1="13" y1="4" x2="13" y2="22" stroke={color} strokeWidth="1.6"/>
-    {/* Baseline horizontal */}
     <line x1="2" y1="13" x2="24" y2="13" stroke={color} strokeWidth="1"/>
-    {/* Left singles sideline */}
     <line x1="6" y1="4" x2="6" y2="22" stroke={color} strokeWidth="0.9"/>
-    {/* Right singles sideline */}
     <line x1="20" y1="4" x2="20" y2="22" stroke={color} strokeWidth="0.9"/>
   </svg>
 );
