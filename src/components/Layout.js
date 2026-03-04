@@ -38,7 +38,32 @@ function Layout({ children }) {
     };
 
     updateLocation();
-  }, []); // runs once when Layout mounts
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────
+
+  // ── Redirect to onboarding if profile is incomplete ──────────────────
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      // Don't check on public/auth/onboarding pages
+      const skipPaths = ['/', '/login', '/onboarding'];
+      if (skipPaths.includes(location.pathname) || location.pathname.startsWith('/signup')) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+
+      if (profile && profile.onboarding_complete === false) {
+        navigate('/onboarding');
+      }
+    };
+
+    checkOnboarding();
+}, [location.pathname, navigate]); // re-check on every page change
   // ─────────────────────────────────────────────────────────────────────
 
   const navItems = [
@@ -56,7 +81,7 @@ function Layout({ children }) {
     },
   ];
 
-  const noNavPages = ['/', '/login'];
+  const noNavPages = ['/', '/login', '/onboarding'];
   const showNav = !noNavPages.includes(location.pathname) && !location.pathname.startsWith('/signup');
   const isActive = (path) => location.pathname === path;
 

@@ -68,8 +68,8 @@ function Signup() {
 
       if (profileError) throw profileError;
 
-      // Success — go to discovery
-      navigate('/discovery');
+      // Success — go to onboarding
+      navigate('/onboarding');
 
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');

@@ -1,0 +1,625 @@
+import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabase';
+
+const TOTAL_STEPS = 6;
+
+const theme = {
+  bg: '#f4f6f8',
+  navy: '#0a1628',
+  accent: '#c8ff00',
+  font: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+};
+
+const styles = {
+  wrapper: {
+    minHeight: '100vh',
+    backgroundColor: theme.navy,
+    display: 'flex',
+    flexDirection: 'column',
+    fontFamily: theme.font,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  bgPattern: {
+    position: 'absolute',
+    inset: 0,
+    backgroundImage: `radial-gradient(circle at 20% 80%, rgba(200,255,0,0.05) 0%, transparent 50%),
+                      radial-gradient(circle at 80% 20%, rgba(200,255,0,0.04) 0%, transparent 50%)`,
+    pointerEvents: 'none',
+  },
+  progressBar: {
+    padding: '48px 32px 0',
+    position: 'relative',
+    zIndex: 1,
+  },
+  progressTrack: {
+    display: 'flex',
+    gap: '6px',
+  },
+  progressDot: (active, done) => ({
+    flex: 1,
+    height: '3px',
+    borderRadius: '2px',
+    backgroundColor: done || active ? theme.accent : 'rgba(255,255,255,0.15)',
+    transition: 'background-color 0.3s ease',
+  }),
+  content: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    padding: '40px 32px 32px',
+    position: 'relative',
+    zIndex: 1,
+  },
+  stepLabel: {
+    fontSize: '11px',
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    color: theme.accent,
+    marginBottom: '12px',
+    fontWeight: '600',
+  },
+  heading: {
+    fontSize: '32px',
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: '1.15',
+    marginBottom: '8px',
+  },
+  subheading: {
+    fontSize: '15px',
+    color: 'rgba(255,255,255,0.45)',
+    marginBottom: '40px',
+    lineHeight: '1.5',
+  },
+  input: {
+    width: '100%',
+    padding: '18px 20px',
+    fontSize: '17px',
+    fontFamily: theme.font,
+    fontWeight: '500',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    border: '1.5px solid rgba(255,255,255,0.12)',
+    borderRadius: '14px',
+    color: '#ffffff',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.2s, background-color 0.2s',
+  },
+  inputFocused: {
+    borderColor: theme.accent,
+    backgroundColor: 'rgba(200,255,0,0.05)',
+  },
+  pillRow: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  pill: (selected) => ({
+    flex: '1 1 auto',
+    padding: '16px 20px',
+    borderRadius: '14px',
+    border: `1.5px solid ${selected ? theme.accent : 'rgba(255,255,255,0.12)'}`,
+    backgroundColor: selected ? 'rgba(200,255,0,0.1)' : 'rgba(255,255,255,0.05)',
+    color: selected ? theme.accent : 'rgba(255,255,255,0.6)',
+    fontSize: '15px',
+    fontWeight: selected ? '600' : '400',
+    fontFamily: theme.font,
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.2s',
+  }),
+  ageRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  ageBtn: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '50%',
+    border: '1.5px solid rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    color: '#fff',
+    fontSize: '22px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    transition: 'all 0.15s',
+  },
+  ageDisplay: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: '48px',
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: '-1px',
+  },
+  sliderContainer: {
+    paddingTop: '8px',
+  },
+  slider: {
+    width: '100%',
+    height: '6px',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    borderRadius: '3px',
+    outline: 'none',
+    cursor: 'pointer',
+  },
+  utrValue: {
+    fontSize: '64px',
+    fontWeight: '700',
+    color: theme.accent,
+    letterSpacing: '-2px',
+    lineHeight: '1',
+    marginBottom: '4px',
+  },
+  utrLabel: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: '28px',
+  },
+  utrDescriptions: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '8px',
+    marginTop: '24px',
+  },
+  utrTier: (active) => ({
+    padding: '10px 8px',
+    borderRadius: '10px',
+    backgroundColor: active ? 'rgba(200,255,0,0.1)' : 'rgba(255,255,255,0.04)',
+    border: `1px solid ${active ? 'rgba(200,255,0,0.3)' : 'transparent'}`,
+    textAlign: 'center',
+  }),
+  utrTierLabel: (active) => ({
+    fontSize: '11px',
+    fontWeight: '600',
+    color: active ? theme.accent : 'rgba(255,255,255,0.3)',
+    letterSpacing: '0.5px',
+  }),
+  utrTierRange: (active) => ({
+    fontSize: '10px',
+    color: active ? 'rgba(200,255,0,0.7)' : 'rgba(255,255,255,0.2)',
+    marginTop: '2px',
+  }),
+  photoArea: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '20px',
+  },
+  avatarCircle: (hasPhoto) => ({
+    width: '140px',
+    height: '140px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    border: `2px dashed ${hasPhoto ? theme.accent : 'rgba(255,255,255,0.2)'}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    transition: 'border-color 0.2s',
+  }),
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  photoPlaceholder: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  locationBtn: (active) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '18px 20px',
+    borderRadius: '14px',
+    border: `1.5px solid ${active ? theme.accent : 'rgba(255,255,255,0.12)'}`,
+    backgroundColor: active ? 'rgba(200,255,0,0.08)' : 'rgba(255,255,255,0.05)',
+    color: active ? theme.accent : 'rgba(255,255,255,0.6)',
+    fontSize: '15px',
+    fontWeight: active ? '600' : '400',
+    fontFamily: theme.font,
+    cursor: 'pointer',
+    width: '100%',
+    textAlign: 'left',
+    transition: 'all 0.2s',
+    marginBottom: '12px',
+  }),
+  locationText: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    lineHeight: '1.5',
+  },
+  footer: {
+    padding: '0 32px 48px',
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  primaryBtn: (disabled) => ({
+    width: '100%',
+    padding: '18px',
+    borderRadius: '14px',
+    border: 'none',
+    backgroundColor: disabled ? 'rgba(200,255,0,0.3)' : theme.accent,
+    color: disabled ? 'rgba(10,22,40,0.4)' : theme.navy,
+    fontSize: '16px',
+    fontWeight: '700',
+    fontFamily: theme.font,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    transition: 'all 0.2s',
+    letterSpacing: '0.3px',
+  }),
+  skipBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: '14px',
+    fontFamily: theme.font,
+    cursor: 'pointer',
+    padding: '8px',
+    textAlign: 'center',
+  },
+};
+
+const utrTiers = [
+  { label: 'Beginner', range: '1–4' },
+  { label: 'Intermediate', range: '5–8' },
+  { label: 'Advanced', range: '9–12' },
+  { label: 'Pro', range: '13–16' },
+];
+
+function getUtrTier(val) {
+  if (val <= 4) return 0;
+  if (val <= 8) return 1;
+  if (val <= 12) return 2;
+  return 3;
+}
+
+export default function Onboarding() {
+  const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [focusedInput, setFocusedInput] = useState(null);
+
+  const [name, setName] = useState('');
+  const [age, setAge] = useState(25);
+  const [gender, setGender] = useState('');
+  const [locationLabel, setLocationLabel] = useState('');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [locLoading, setLocLoading] = useState(false);
+  const [dominantHand, setDominantHand] = useState('');
+  const [utr, setUtr] = useState(5);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
+  const canProceed = () => {
+    switch (step) {
+      case 1: return name.trim().length >= 2;
+      case 2: return age >= 10 && age <= 80 && gender !== '';
+      case 3: return true;
+      case 4: return dominantHand !== '';
+      case 5: return true;
+      case 6: return true;
+      default: return false;
+    }
+  };
+
+  const handleGPS = () => {
+    setLocLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setLatitude(lat);
+        setLongitude(lng);
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+          );
+          const data = await res.json();
+          const city =
+            data.address?.city ||
+            data.address?.town ||
+            data.address?.village ||
+            data.address?.county ||
+            'Your location';
+          const country = data.address?.country_code?.toUpperCase() || '';
+          setLocationLabel(`${city}${country ? ', ' + country : ''}`);
+        } catch {
+          setLocationLabel('Location saved');
+        }
+        setLocLoading(false);
+      },
+      () => {
+        setLocLoading(false);
+        setLocationLabel('');
+      }
+    );
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleFinish = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      let avatar_url = null;
+
+      if (photoFile) {
+        const ext = photoFile.name.split('.').pop();
+        const path = `${user.id}/avatar.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('Avatars')
+          .upload(path, photoFile, { upsert: true });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage
+            .from('Avatars')
+            .getPublicUrl(path);
+          avatar_url = urlData.publicUrl;
+        }
+      }
+
+      // Use update (not upsert) — row already exists from Signup
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: name.trim() || null,
+          age,
+          gender: gender || null,
+          latitude,
+          longitude,
+          location: locationLabel || null,
+          dominant_hand: dominantHand || null,
+          utr_rating: utr,
+          ...(avatar_url && { avatar_url }),
+          onboarding_complete: true,
+        })
+        .eq('id', user.id);
+
+      if (error) console.error('Onboarding save error:', error);
+
+      // Always navigate — never block the user
+      navigate('/discovery');
+    } catch (err) {
+      console.error('Onboarding error:', err);
+      navigate('/discovery');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleNext = () => {
+    if (step < TOTAL_STEPS) {
+      setStep((s) => s + 1);
+    } else {
+      handleFinish();
+    }
+  };
+
+  const handleSkip = () => {
+    if (step < TOTAL_STEPS) {
+      setStep((s) => s + 1);
+    } else {
+      handleFinish();
+    }
+  };
+
+  const renderStep = () => {
+    switch (step) {
+      case 1:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 1 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>What's your name?</div>
+            <div style={styles.subheading}>This is how other players will find you.</div>
+            <input
+              style={{ ...styles.input, ...(focusedInput === 'name' ? styles.inputFocused : {}) }}
+              placeholder="First name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onFocus={() => setFocusedInput('name')}
+              onBlur={() => setFocusedInput(null)}
+              autoFocus
+            />
+          </>
+        );
+
+      case 2:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 2 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Age & gender</div>
+            <div style={styles.subheading}>Helps us find the right match for you.</div>
+            <div style={styles.ageRow}>
+              <button style={styles.ageBtn} onClick={() => setAge((a) => Math.max(10, a - 1))}>−</button>
+              <div style={styles.ageDisplay}>{age}</div>
+              <button style={styles.ageBtn} onClick={() => setAge((a) => Math.min(80, a + 1))}>+</button>
+            </div>
+            <div style={{ height: '28px' }} />
+            <div style={styles.pillRow}>
+              {['Male', 'Female', 'Other'].map((g) => (
+                <button key={g} style={styles.pill(gender === g)} onClick={() => setGender(g)}>{g}</button>
+              ))}
+            </div>
+          </>
+        );
+
+      case 3:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 3 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Where are you based?</div>
+            <div style={styles.subheading}>We'll show you players nearby.</div>
+            <button style={styles.locationBtn(!!locationLabel)} onClick={handleGPS} disabled={locLoading}>
+              <span style={{ fontSize: '20px' }}>{locLoading ? '⏳' : locationLabel ? '📍' : '🎯'}</span>
+              <span>{locLoading ? 'Getting location…' : locationLabel ? locationLabel : 'Use my current location'}</span>
+            </button>
+            <div style={styles.locationText}>
+              Your location is only shared as approximate distance — never your exact address.
+            </div>
+          </>
+        );
+
+      case 4:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 4 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Dominant hand?</div>
+            <div style={styles.subheading}>Left or right — it matters on the court.</div>
+            <div style={styles.pillRow}>
+              {['Left', 'Right'].map((h) => (
+                <button
+                  key={h}
+                  style={{ ...styles.pill(dominantHand === h), fontSize: '17px', padding: '22px' }}
+                  onClick={() => setDominantHand(h)}
+                >
+                  {h === 'Left' ? '🫲 Left' : '🫱 Right'}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+
+      case 5: {
+        const tierIndex = getUtrTier(utr);
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 5 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Your UTR rating</div>
+            <div style={styles.subheading}>Universal Tennis Rating — drag to set your level.</div>
+            <div style={styles.utrValue}>{utr}</div>
+            <div style={styles.utrLabel}>UTR</div>
+            <div style={styles.sliderContainer}>
+              <style>{`
+                input[type=range].utr-slider::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  width: 26px; height: 26px;
+                  border-radius: 50%;
+                  background: ${theme.accent};
+                  cursor: pointer;
+                  box-shadow: 0 0 0 4px rgba(200,255,0,0.2);
+                }
+                input[type=range].utr-slider::-webkit-slider-runnable-track {
+                  height: 6px; border-radius: 3px;
+                  background: linear-gradient(to right, ${theme.accent} ${((utr - 1) / 15) * 100}%, rgba(255,255,255,0.15) ${((utr - 1) / 15) * 100}%);
+                }
+              `}</style>
+              <input
+                type="range" className="utr-slider"
+                min={1} max={16} value={utr}
+                onChange={(e) => setUtr(Number(e.target.value))}
+                style={{ ...styles.slider, background: 'transparent' }}
+              />
+            </div>
+            <div style={styles.utrDescriptions}>
+              {utrTiers.map((tier, i) => (
+                <div key={tier.label} style={styles.utrTier(i === tierIndex)}>
+                  <div style={styles.utrTierLabel(i === tierIndex)}>{tier.label}</div>
+                  <div style={styles.utrTierRange(i === tierIndex)}>{tier.range}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      }
+
+      case 6:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 6 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Add a photo</div>
+            <div style={styles.subheading}>Players with photos get 3× more connection requests.</div>
+            <div style={styles.photoArea}>
+              <div style={styles.avatarCircle(!!photoPreview)} onClick={() => fileInputRef.current?.click()}>
+                {photoPreview ? (
+                  <img src={photoPreview} alt="avatar" style={styles.avatarImg} />
+                ) : (
+                  <div style={styles.photoPlaceholder}>
+                    <span style={{ fontSize: '32px' }}>📷</span>
+                    <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)' }}>Tap to upload</span>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handlePhotoChange}
+              />
+              {photoPreview && (
+                <button
+                  style={{
+                    background: 'none',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '10px',
+                    color: 'rgba(255,255,255,0.5)',
+                    padding: '10px 20px',
+                    fontSize: '13px',
+                    fontFamily: theme.font,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Change photo
+                </button>
+              )}
+            </div>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div style={styles.wrapper}>
+      <div style={styles.bgPattern} />
+      <div style={styles.progressBar}>
+        <div style={styles.progressTrack}>
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <div key={i} style={styles.progressDot(i + 1 === step, i + 1 < step)} />
+          ))}
+        </div>
+      </div>
+      <div style={styles.content}>{renderStep()}</div>
+      <div style={styles.footer}>
+        <button
+          style={styles.primaryBtn(!canProceed() || saving)}
+          onClick={handleNext}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : step === TOTAL_STEPS ? 'Start Playing 🎾' : 'Continue'}
+        </button>
+        <button style={styles.skipBtn} onClick={handleSkip}>
+          {step === TOTAL_STEPS ? 'Skip for now' : 'Skip this step'}
+        </button>
+      </div>
+    </div>
+  );
+}

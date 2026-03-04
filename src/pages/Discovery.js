@@ -32,6 +32,8 @@ function Discovery() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
+  const [connections, setConnections] = useState([]); // all my connections
+  const [connecting, setConnecting] = useState(null); // id of user being connected
 
   useEffect(() => {
     fetchCurrentUser();
@@ -43,7 +45,6 @@ function Discovery() {
     if (!user) return;
     setCurrentUser(user);
 
-    // Get my profile so we have my lat/lng for distance calculations
     const { data } = await supabase
       .from('profiles')
       .select('latitude, longitude')
@@ -51,6 +52,14 @@ function Discovery() {
       .single();
 
     if (data) setMyProfile(data);
+
+    // Fetch all connections involving me
+    const { data: conns } = await supabase
+      .from('connections')
+      .select('*')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+    if (conns) setConnections(conns);
   };
 
   const fetchUsers = async () => {
@@ -66,6 +75,55 @@ function Discovery() {
       setUsers(data || []);
     }
     setLoading(false);
+  };
+
+  // Returns the connection status between me and another user
+  const getConnectionStatus = (otherUserId) => {
+    const conn = connections.find(c =>
+      (c.sender_id === currentUser?.id && c.receiver_id === otherUserId) ||
+      (c.receiver_id === currentUser?.id && c.sender_id === otherUserId)
+    );
+    if (!conn) return null;
+    if (conn.status === 'accepted') return 'accepted';
+    if (conn.sender_id === currentUser?.id) return 'pending_sent';
+    return 'pending_received';
+  };
+
+  const handleConnect = async (otherUserId) => {
+    if (!currentUser || connecting) return;
+    setConnecting(otherUserId);
+    try {
+      const { data, error } = await supabase
+        .from('connections')
+        .insert({ sender_id: currentUser.id, receiver_id: otherUserId, status: 'pending' })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setConnections(prev => [...prev, data]);
+      }
+    } catch (err) {
+      console.error('Connect error:', err);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const handleAccept = async (otherUserId) => {
+    const conn = connections.find(c =>
+      c.sender_id === otherUserId && c.receiver_id === currentUser?.id
+    );
+    if (!conn) return;
+    const { data, error } = await supabase
+      .from('connections')
+      .update({ status: 'accepted' })
+      .eq('id', conn.id)
+      .select()
+      .single();
+
+    if (!error && data) {
+      setConnections(prev => prev.map(c => c.id === data.id ? data : c));
+    }
   };
 
   if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} users={users} />;
@@ -238,7 +296,27 @@ function Discovery() {
                   {user.bio && <p style={styles.cardBio}>{user.bio}</p>}
                   <div style={styles.cardFooter}>
                     {user.availability && <span style={styles.availability}>🕐 {user.availability}</span>}
-                    <button style={styles.connectBtn}>Connect</button>
+                    {(() => {
+                      const status = getConnectionStatus(user.id);
+                      if (status === 'accepted') return (
+                        <button style={styles.connectedBtn} disabled>Connected ✓</button>
+                      );
+                      if (status === 'pending_sent') return (
+                        <button style={styles.pendingBtn} disabled>Pending…</button>
+                      );
+                      if (status === 'pending_received') return (
+                        <button style={styles.acceptBtn} onClick={() => handleAccept(user.id)}>Accept ✓</button>
+                      );
+                      return (
+                        <button
+                          style={styles.connectBtn}
+                          onClick={() => handleConnect(user.id)}
+                          disabled={connecting === user.id}
+                        >
+                          {connecting === user.id ? '...' : 'Connect'}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ))
@@ -442,6 +520,36 @@ const styles = {
   connectBtn: {
     backgroundColor: '#0a1628',
     color: '#c8ff00',
+    padding: '7px 16px',
+    borderRadius: '999px',
+    border: 'none',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  connectedBtn: {
+    backgroundColor: '#e8f5e9',
+    color: '#2e7d32',
+    padding: '7px 16px',
+    borderRadius: '999px',
+    border: 'none',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'default',
+  },
+  pendingBtn: {
+    backgroundColor: '#f4f6f8',
+    color: '#9aa0ac',
+    padding: '7px 16px',
+    borderRadius: '999px',
+    border: '1.5px solid #e0e4ea',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'default',
+  },
+  acceptBtn: {
+    backgroundColor: '#c8ff00',
+    color: '#0a1628',
     padding: '7px 16px',
     borderRadius: '999px',
     border: 'none',
