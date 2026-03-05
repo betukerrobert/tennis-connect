@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { theme, roleColors, roleLabels } from '../theme';
 import SwipeMode from '../components/SwipeMode';
 import Logo from '../components/Logo';
@@ -24,6 +25,7 @@ function formatDistance(km) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function Discovery() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [pressed, setPressed] = useState(null);
@@ -32,8 +34,8 @@ function Discovery() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
-  const [connections, setConnections] = useState([]); // all my connections
-  const [connecting, setConnecting] = useState(null); // id of user being connected
+  const [connections, setConnections] = useState([]);
+  const [connecting, setConnecting] = useState(null);
 
   useEffect(() => {
     fetchCurrentUser();
@@ -53,7 +55,6 @@ function Discovery() {
 
     if (data) setMyProfile(data);
 
-    // Fetch all connections involving me
     const { data: conns } = await supabase
       .from('connections')
       .select('*')
@@ -77,7 +78,6 @@ function Discovery() {
     setLoading(false);
   };
 
-  // Returns the connection status between me and another user
   const getConnectionStatus = (otherUserId) => {
     const conn = connections.find(c =>
       (c.sender_id === currentUser?.id && c.receiver_id === otherUserId) ||
@@ -128,7 +128,6 @@ function Discovery() {
 
   if (swipeMode) return <SwipeMode onClose={() => setSwipeMode(false)} users={users} />;
 
-  // Filter out current user, apply role + search filters
   const filtered = users
     .filter(u => {
       if (currentUser && u.id === currentUser.id) return false;
@@ -140,7 +139,6 @@ function Discovery() {
       return matchesFilter && matchesSearch;
     })
     .map(u => {
-      // Attach distance if both users have coordinates
       if (
         myProfile?.latitude && myProfile?.longitude &&
         u.latitude && u.longitude
@@ -151,17 +149,11 @@ function Discovery() {
       return { ...u, distanceKm: null };
     })
     .sort((a, b) => {
-      // Sort by distance if available, otherwise keep original order
       if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
       if (a.distanceKm !== null) return -1;
       if (b.distanceKm !== null) return 1;
       return 0;
     });
-
-  // Show real city from location field if available, else fallback
-  const locationLabel = myProfile
-    ? null // we'll show nothing until we have a name
-    : null;
 
   const filters = [
     { id: 'all', label: 'All' },
@@ -290,6 +282,10 @@ function Discovery() {
                           <span style={styles.metaDot}>·</span>
                           <span style={styles.metaItem}>⭐ {user.level}</span>
                         </>}
+                        {user.utr_rating && <>
+                          <span style={styles.metaDot}>·</span>
+                          <span style={styles.metaItem}>UTR {user.utr_rating}</span>
+                        </>}
                       </div>
                     </div>
                   </div>
@@ -299,7 +295,15 @@ function Discovery() {
                     {(() => {
                       const status = getConnectionStatus(user.id);
                       if (status === 'accepted') return (
-                        <button style={styles.connectedBtn} disabled>Connected ✓</button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button style={styles.connectedBtn} disabled>Connected ✓</button>
+                          <button
+                            style={styles.scheduleBtn}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/schedule/${user.id}`); }}
+                          >
+                            🎾
+                          </button>
+                        </div>
                       );
                       if (status === 'pending_sent') return (
                         <button style={styles.pendingBtn} disabled>Pending…</button>
@@ -501,6 +505,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+    flexWrap: 'wrap',
   },
   metaItem: { fontSize: '11px', color: '#9aa0ac' },
   metaDot: { color: '#e0e4ea' },
@@ -536,6 +541,16 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     cursor: 'default',
+  },
+  scheduleBtn: {
+    backgroundColor: '#c8ff00',
+    color: '#0a1628',
+    padding: '7px 10px',
+    borderRadius: '999px',
+    border: 'none',
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
   },
   pendingBtn: {
     backgroundColor: '#f4f6f8',

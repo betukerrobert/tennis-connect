@@ -131,8 +131,6 @@ function Profile() {
       </div>
 
       <div style={styles.profileHero}>
-
-        {/* Avatar with upload on tap */}
         <div style={styles.avatarWrapper} onClick={() => fileInputRef.current.click()}>
           {profile.avatar_url ? (
             <img src={profile.avatar_url} alt="avatar" style={styles.avatarPhoto} />
@@ -178,6 +176,10 @@ function Profile() {
         ) : (
           <p style={styles.location}>📍 {profile.location || 'No location set'}</p>
         )}
+
+        {profile.utr_rating && (
+          <div style={styles.utrBadge}>UTR {profile.utr_rating}</div>
+        )}
       </div>
 
       <div style={styles.statsRow}>
@@ -195,6 +197,13 @@ function Profile() {
           <span style={styles.statValue}>Free</span>
           <span style={styles.statLabel}>Plan</span>
         </div>
+      </div>
+
+      {/* My Matches button */}
+      <div style={styles.section}>
+        <button style={styles.matchesBtn} onClick={() => navigate('/matches')}>
+          🎾 My Matches
+        </button>
       </div>
 
       <div style={styles.section}>
@@ -236,6 +245,12 @@ function Profile() {
               )}
             </div>
           ))}
+          {profile.dominant_hand && (
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Dominant Hand</span>
+              <span style={styles.detailValue}>{profile.dominant_hand}</span>
+            </div>
+          )}
           <div style={styles.detailItem}>
             <span style={styles.detailLabel}>Member Since</span>
             <span style={styles.detailValue}>
@@ -384,6 +399,15 @@ const styles = {
     fontWeight: '500',
     letterSpacing: '0.5px',
   },
+  utrBadge: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#c8ff00',
+    backgroundColor: 'rgba(200,255,0,0.12)',
+    padding: '4px 12px',
+    borderRadius: '999px',
+    letterSpacing: '0.5px',
+  },
   location: {
     margin: '0',
     fontSize: '12px',
@@ -437,6 +461,19 @@ const styles = {
   },
   section: {
     marginBottom: '16px',
+  },
+  matchesBtn: {
+    width: '100%',
+    padding: '14px',
+    borderRadius: '12px',
+    border: 'none',
+    backgroundColor: '#0a1628',
+    color: '#c8ff00',
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    letterSpacing: '0.2px',
   },
   sectionTitle: {
     fontSize: '11px',

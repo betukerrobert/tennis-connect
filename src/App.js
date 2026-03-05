@@ -3,11 +3,14 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Signup from './pages/Signup';
 import Login from './pages/Login';
+import Onboarding from './pages/Onboarding';
 import Discovery from './pages/Discovery';
 import Profile from './pages/Profile';
 import Messages from './pages/Messages';
 import Chat from './pages/Chat';
-import Onboarding from './pages/Onboarding';
+import ScheduleMatch from './pages/ScheduleMatch';
+import Matches from './pages/Matches';
+import MatchInvite from './pages/MatchInvite';
 
 function App() {
   return (
@@ -22,6 +25,9 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/chat/:id" element={<Chat />} />
+          <Route path="/schedule/:userId" element={<ScheduleMatch />} />
+          <Route path="/matches" element={<Matches />} />
+          <Route path="/match-invite/:matchId" element={<MatchInvite />} />
         </Routes>
       </Layout>
     </BrowserRouter>

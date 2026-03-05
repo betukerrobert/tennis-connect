@@ -7,6 +7,10 @@ function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
+  const [notifications, setNotifications] = useState({
+    matches: false,
+    messages: false,
+  });
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
@@ -18,10 +22,8 @@ function Layout({ children }) {
   useEffect(() => {
     const updateLocation = async () => {
       if (!navigator.geolocation) return;
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           await supabase
@@ -36,53 +38,102 @@ function Layout({ children }) {
         { timeout: 10000 }
       );
     };
-
     updateLocation();
   }, []);
-  // ─────────────────────────────────────────────────────────────────────
 
   // ── Redirect to onboarding if profile is incomplete ──────────────────
   useEffect(() => {
     const checkOnboarding = async () => {
-      // Don't check on public/auth/onboarding pages
       const skipPaths = ['/', '/login', '/onboarding'];
       if (skipPaths.includes(location.pathname) || location.pathname.startsWith('/signup')) return;
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data: profile } = await supabase
         .from('profiles')
         .select('onboarding_complete')
         .eq('id', user.id)
         .single();
-
       if (profile && profile.onboarding_complete === false) {
         navigate('/onboarding');
       }
     };
-
     checkOnboarding();
-}, [location.pathname, navigate]); // re-check on every page change
+  }, [location.pathname, navigate]);
+
+  // ── Fetch notification state ──────────────────────────────────────────
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Pending match invites received by me
+      const { data: pendingMatches } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('receiver_id', user.id)
+        .eq('status', 'pending');
+
+      // 2. Suggested new times sent to me (I am sender, status is rescheduled)
+      const { data: rescheduledMatches } = await supabase
+        .from('matches')
+        .select('id')
+        .eq('sender_id', user.id)
+        .eq('status', 'rescheduled');
+
+      // 3. Pending connection requests received by me
+      const { data: pendingConnections } = await supabase
+        .from('connections')
+        .select('id')
+        .eq('receiver_id', user.id)
+        .eq('status', 'pending');
+
+      const hasMatchNotif =
+        (pendingMatches?.length > 0) ||
+        (rescheduledMatches?.length > 0);
+
+      const hasConnectionNotif = pendingConnections?.length > 0;
+
+      setNotifications({
+        matches: hasMatchNotif,
+        // Show connection dot on Discovery since that's where you accept
+        discovery: hasConnectionNotif,
+      });
+    };
+
+    fetchNotifications();
+    // Re-check every time the page changes
+  }, [location.pathname]);
   // ─────────────────────────────────────────────────────────────────────
 
   const navItems = [
     {
       path: '/discovery', label: 'Discover',
+      notif: notifications.discovery,
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
     },
     {
+      path: '/matches', label: 'Matches',
+      notif: notifications.matches,
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+    },
+    {
       path: '/messages', label: 'Messages',
+      notif: false,
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
     },
     {
       path: '/profile', label: 'Profile',
+      notif: false,
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
     },
   ];
 
   const noNavPages = ['/', '/login', '/onboarding'];
-  const showNav = !noNavPages.includes(location.pathname) && !location.pathname.startsWith('/signup');
+  const showNav = !noNavPages.includes(location.pathname)
+    && !location.pathname.startsWith('/signup')
+    && !location.pathname.startsWith('/schedule')
+    && !location.pathname.startsWith('/match-invite');
+
   const isActive = (path) => location.pathname === path;
 
   if (!showNav) return <div>{children}</div>;
@@ -90,8 +141,6 @@ function Layout({ children }) {
   if (isDesktop) {
     return (
       <div style={styles.desktopWrapper}>
-
-        {/* SIDEBAR */}
         <div style={styles.sidebar}>
           <div style={styles.sidebarLogoArea} onClick={() => navigate('/discovery')}>
             <Logo size="md" dark={false} />
@@ -108,8 +157,9 @@ function Layout({ children }) {
                 }}
                 onClick={() => navigate(item.path)}
               >
-                <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.4)' }}>
+                <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.4)', position: 'relative' }}>
                   {item.icon}
+                  {item.notif && <span style={styles.sidebarDot} />}
                 </span>
                 <span style={{
                   ...styles.sidebarNavLabel,
@@ -118,6 +168,7 @@ function Layout({ children }) {
                 }}>
                   {item.label}
                 </span>
+                {item.notif && <span style={styles.sidebarNotifDot} />}
               </div>
             ))}
           </nav>
@@ -136,13 +187,11 @@ function Layout({ children }) {
           </div>
         </div>
 
-        {/* MAIN CONTENT */}
         <div style={styles.desktopMain}>
           <div style={styles.desktopContent}>
             {children}
           </div>
         </div>
-
       </div>
     );
   }
@@ -154,9 +203,12 @@ function Layout({ children }) {
       <div style={styles.bottomNav}>
         {navItems.map(item => (
           <div key={item.path} style={styles.navItem} onClick={() => navigate(item.path)}>
-            <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)' }}>
-              {item.icon}
-            </span>
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)' }}>
+                {item.icon}
+              </span>
+              {item.notif && <span style={styles.mobileDot} />}
+            </div>
             <span style={{
               ...styles.navLabel,
               color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)',
@@ -207,10 +259,29 @@ const styles = {
     borderRadius: '10px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
+    position: 'relative',
   },
   sidebarNavLabel: {
     fontSize: '14px',
     letterSpacing: '0.1px',
+    flex: 1,
+  },
+  sidebarDot: {
+    position: 'absolute',
+    top: '-2px',
+    right: '-2px',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#ef4444',
+    border: '1.5px solid #0a1628',
+  },
+  sidebarNotifDot: {
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    backgroundColor: '#ef4444',
+    flexShrink: 0,
   },
   sidebarFooter: {
     padding: '18px',
@@ -296,6 +367,16 @@ const styles = {
     alignItems: 'center',
     cursor: 'pointer',
     gap: '3px',
+  },
+  mobileDot: {
+    position: 'absolute',
+    top: '-1px',
+    right: '-1px',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#ef4444',
+    border: '1.5px solid #0a1628',
   },
   navLabel: {
     fontSize: '10px',
