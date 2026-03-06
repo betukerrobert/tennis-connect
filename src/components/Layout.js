@@ -115,14 +115,12 @@ function Layout({ children }) {
 
     setNotifications({
       matches: hasMatchNotif,
-      // Show connection dot on Discovery since that's where you accept
       discovery: hasConnectionNotif,
     });
   };
 
   useEffect(() => {
     fetchNotifications();
-    // Re-check every time the page changes
   }, [location.pathname]);
   // ─────────────────────────────────────────────────────────────────────
 
@@ -136,6 +134,11 @@ function Layout({ children }) {
       path: '/matches', label: 'Matches',
       notif: notifications.matches,
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+    },
+    {
+      path: '/courts', label: 'Courts',
+      notif: false,
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M2 7h4M18 7h4M2 17h4M18 17h4"/></svg>,
     },
     {
       path: '/messages', label: 'Messages',
@@ -225,7 +228,11 @@ function Layout({ children }) {
         {navItems.map(item => (
           <div key={item.path} style={styles.navItem} onClick={() => navigate(item.path)}>
             <div style={{ position: 'relative', display: 'inline-flex' }}>
-              <span style={{ color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)' }}>
+              <span style={{
+                color: isActive(item.path) ? '#c8ff00' : 'rgba(255,255,255,0.35)',
+                transform: 'scale(0.85)',
+                display: 'inline-flex',
+              }}>
                 {item.icon}
               </span>
               {item.notif && <span style={styles.mobileDot} />}
@@ -379,7 +386,7 @@ const styles = {
     background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
     display: 'flex',
     justifyContent: 'space-around',
-    padding: '10px 0 14px 0',
+    padding: '8px 4px 12px 4px',
     zIndex: 100,
   },
   navItem: {
@@ -387,7 +394,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     cursor: 'pointer',
-    gap: '3px',
+    gap: '2px',
   },
   mobileDot: {
     position: 'absolute',
@@ -400,9 +407,9 @@ const styles = {
     border: '1.5px solid #0a1628',
   },
   navLabel: {
-    fontSize: '10px',
+    fontSize: '9px',
     textTransform: 'uppercase',
-    letterSpacing: '0.8px',
+    letterSpacing: '0.3px',
   },
 };
 
