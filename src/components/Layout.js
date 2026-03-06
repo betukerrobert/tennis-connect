@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Logo from './Logo';
 import { supabase } from '../supabase';
+import { requestNotificationPermission, onMessageListener } from '../notificationService';
 
 function Layout({ children }) {
   const navigate = useNavigate();
@@ -24,6 +25,10 @@ function Layout({ children }) {
       if (!navigator.geolocation) return;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      
+      // Request notification permission when user is logged in
+      await requestNotificationPermission(user.id);
+      
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           await supabase
@@ -39,6 +44,22 @@ function Layout({ children }) {
       );
     };
     updateLocation();
+
+    // Listen for foreground notifications
+    onMessageListener()
+      .then((payload) => {
+        console.log('Received foreground message:', payload);
+        // Show browser notification
+        if (Notification.permission === 'granted') {
+          new Notification(payload.notification?.title || 'Tennis Connect', {
+            body: payload.notification?.body,
+            icon: '/logo192.png'
+          });
+        }
+        // Refresh notification counts
+        fetchNotifications();
+      })
+      .catch((err) => console.log('Failed to receive foreground message:', err));
   }, []);
 
   // ── Redirect to onboarding if profile is incomplete ──────────────────
@@ -61,45 +82,45 @@ function Layout({ children }) {
   }, [location.pathname, navigate]);
 
   // ── Fetch notification state ──────────────────────────────────────────
+  const fetchNotifications = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Pending match invites received by me
+    const { data: pendingMatches } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending');
+
+    // 2. Suggested new times sent to me (I am sender, status is rescheduled)
+    const { data: rescheduledMatches } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('sender_id', user.id)
+      .eq('status', 'rescheduled');
+
+    // 3. Pending connection requests received by me
+    const { data: pendingConnections } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending');
+
+    const hasMatchNotif =
+      (pendingMatches?.length > 0) ||
+      (rescheduledMatches?.length > 0);
+
+    const hasConnectionNotif = pendingConnections?.length > 0;
+
+    setNotifications({
+      matches: hasMatchNotif,
+      // Show connection dot on Discovery since that's where you accept
+      discovery: hasConnectionNotif,
+    });
+  };
+
   useEffect(() => {
-    const fetchNotifications = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // 1. Pending match invites received by me
-      const { data: pendingMatches } = await supabase
-        .from('matches')
-        .select('id')
-        .eq('receiver_id', user.id)
-        .eq('status', 'pending');
-
-      // 2. Suggested new times sent to me (I am sender, status is rescheduled)
-      const { data: rescheduledMatches } = await supabase
-        .from('matches')
-        .select('id')
-        .eq('sender_id', user.id)
-        .eq('status', 'rescheduled');
-
-      // 3. Pending connection requests received by me
-      const { data: pendingConnections } = await supabase
-        .from('connections')
-        .select('id')
-        .eq('receiver_id', user.id)
-        .eq('status', 'pending');
-
-      const hasMatchNotif =
-        (pendingMatches?.length > 0) ||
-        (rescheduledMatches?.length > 0);
-
-      const hasConnectionNotif = pendingConnections?.length > 0;
-
-      setNotifications({
-        matches: hasMatchNotif,
-        // Show connection dot on Discovery since that's where you accept
-        discovery: hasConnectionNotif,
-      });
-    };
-
     fetchNotifications();
     // Re-check every time the page changes
   }, [location.pathname]);

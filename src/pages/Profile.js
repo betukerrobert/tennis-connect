@@ -1,3 +1,4 @@
+import StarRating from '../components/StarRating';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
@@ -189,8 +190,20 @@ function Profile() {
         </div>
         <div style={styles.statDivider} />
         <div style={styles.statItem}>
-          <span style={styles.statValue}>New</span>
-          <span style={styles.statLabel}>Member</span>
+          {profile.total_ratings > 0 ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={styles.statValue}>{profile.average_rating}</span>
+                <span style={{ fontSize: '16px' }}>⭐</span>
+              </div>
+              <span style={styles.statLabel}>{profile.total_ratings} Rating{profile.total_ratings !== 1 ? 's' : ''}</span>
+            </>
+          ) : (
+            <>
+              <span style={styles.statValue}>—</span>
+              <span style={styles.statLabel}>No Ratings</span>
+            </>
+          )}
         </div>
         <div style={styles.statDivider} />
         <div style={styles.statItem}>

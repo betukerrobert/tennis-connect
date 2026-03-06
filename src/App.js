@@ -11,6 +11,7 @@ import Chat from './pages/Chat';
 import ScheduleMatch from './pages/ScheduleMatch';
 import Matches from './pages/Matches';
 import MatchInvite from './pages/MatchInvite';
+import RatePlayer from './pages/RatePlayer';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="/schedule/:userId" element={<ScheduleMatch />} />
           <Route path="/matches" element={<Matches />} />
           <Route path="/match-invite/:matchId" element={<MatchInvite />} />
+          <Route path="/rate-player/:matchId/:opponentId" element={<RatePlayer />} />
         </Routes>
       </Layout>
     </BrowserRouter>

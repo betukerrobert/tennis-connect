@@ -4,6 +4,7 @@ import { theme, roleColors, roleLabels } from '../theme';
 import SwipeMode from '../components/SwipeMode';
 import Logo from '../components/Logo';
 import { supabase } from '../supabase';
+import { sendConnectionRequestNotification } from '../notificationService';
 
 // ── Haversine formula — calculates distance in km between two coordinates ──
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -101,6 +102,9 @@ function Discovery() {
 
       if (!error && data) {
         setConnections(prev => [...prev, data]);
+        
+        // Send push notification
+        await sendConnectionRequestNotification(currentUser.id, otherUserId);
       }
     } catch (err) {
       console.error('Connect error:', err);
@@ -285,6 +289,10 @@ function Discovery() {
                         {user.utr_rating && <>
                           <span style={styles.metaDot}>·</span>
                           <span style={styles.metaItem}>UTR {user.utr_rating}</span>
+                        </>}
+                        {user.average_rating > 0 && <>
+                          <span style={styles.metaDot}>·</span>
+                          <span style={styles.metaItem}>{user.average_rating} ⭐</span>
                         </>}
                       </div>
                     </div>

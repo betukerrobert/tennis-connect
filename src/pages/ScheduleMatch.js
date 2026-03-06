@@ -1,3 +1,4 @@
+import { sendMatchInviteNotification } from '../notificationService';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../supabase';
@@ -46,18 +47,26 @@ export default function ScheduleMatch() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase.from('matches').insert({
-        sender_id: user.id,
-        receiver_id: userId,
-        court_name: courtName.trim(),
-        court_address: courtAddress.trim() || null,
-        match_date: date,
-        match_time: time,
-        status: 'pending',
-      });
+const { data: insertedMatch, error } = await supabase.from('matches').insert({
+  sender_id: user.id,
+  receiver_id: userId,
+  court_name: courtName.trim(),
+  court_address: courtAddress.trim() || null,
+  match_date: date,
+  match_time: time,
+  status: 'pending',
+}).select().single();
 
-      if (error) throw error;
-      setSent(true);
+if (error) throw error;
+
+// Send push notification
+await sendMatchInviteNotification(user.id, userId, {
+  id: insertedMatch.id,
+  match_date: date,
+  match_time: time
+});
+
+setSent(true);
     } catch (err) {
       console.error('Schedule error:', err);
     } finally {

@@ -21,6 +21,7 @@ export default function Matches() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('upcoming'); // upcoming | past
   const [currentUser, setCurrentUser] = useState(null);
+  const [ratings, setRatings] = useState([]);
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -39,6 +40,15 @@ export default function Matches() {
         .order('match_date', { ascending: true });
 
       if (!error && data) setMatches(data);
+
+      // Fetch ratings given by current user
+      const { data: ratingsData } = await supabase
+        .from('ratings')
+        .select('match_id')
+        .eq('rater_id', user.id);
+
+      if (ratingsData) setRatings(ratingsData.map(r => r.match_id));
+
       setLoading(false);
     };
     fetchMatches();
@@ -53,6 +63,11 @@ export default function Matches() {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', {
       weekday: 'short', day: 'numeric', month: 'short'
     });
+  };
+
+  const handleRateClick = (e, matchId, opponentId) => {
+    e.stopPropagation();
+    navigate(`/rate-player/${matchId}/${opponentId}`);
   };
 
   if (loading) {
@@ -98,6 +113,12 @@ export default function Matches() {
             const status = statusConfig[match.status] || statusConfig.pending;
             const isPendingForMe = match.status === 'pending' && isReceiver;
             const isRescheduledForMe = match.status === 'rescheduled' && !isReceiver;
+            
+            // Show Rate button on past accepted matches that haven't been rated yet
+            const isPastMatch = match.match_date < today;
+            const isAccepted = match.status === 'accepted';
+            const hasRated = ratings.includes(match.id);
+            const showRateButton = tab === 'past' && isPastMatch && isAccepted && !hasRated;
 
             return (
               <div
@@ -122,6 +143,21 @@ export default function Matches() {
                     <span>⏰ {match.match_time?.slice(0, 5)}</span>
                   </div>
                   <div style={styles.cardCourt}>📍 {match.court_name}</div>
+                  
+                  {/* Rate Player Button */}
+                  {showRateButton && (
+                    <button
+                      style={styles.rateBtn}
+                      onClick={(e) => handleRateClick(e, match.id, opponent.id)}
+                    >
+                      ⭐ Rate Player
+                    </button>
+                  )}
+                  
+                  {/* Already Rated */}
+                  {tab === 'past' && isPastMatch && isAccepted && hasRated && (
+                    <div style={styles.ratedLabel}>✓ Rated</div>
+                  )}
                 </div>
 
                 <div style={styles.cardRight}>
@@ -228,6 +264,25 @@ const styles = {
   cardName: { fontSize: '15px', fontWeight: '600', color: theme.navy },
   cardDetails: { fontSize: '12px', color: 'rgba(10,22,40,0.5)', display: 'flex', alignItems: 'center' },
   cardCourt: { fontSize: '12px', color: 'rgba(10,22,40,0.4)' },
+  rateBtn: {
+    backgroundColor: theme.accent,
+    color: theme.navy,
+    border: 'none',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: '700',
+    fontFamily: theme.font,
+    cursor: 'pointer',
+    marginTop: '6px',
+    alignSelf: 'flex-start',
+  },
+  ratedLabel: {
+    fontSize: '11px',
+    color: '#10b981',
+    fontWeight: '600',
+    marginTop: '4px',
+  },
   cardRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 },
   statusBadge: {
     fontSize: '11px',
