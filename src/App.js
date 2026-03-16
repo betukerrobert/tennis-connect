@@ -13,6 +13,7 @@ import Matches from './pages/Matches';
 import MatchInvite from './pages/MatchInvite';
 import RatePlayer from './pages/RatePlayer';
 import Courts from './pages/Courts';
+import Pong from './pages/Pong';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="/match-invite/:matchId" element={<MatchInvite />} />
           <Route path="/rate-player/:matchId/:opponentId" element={<RatePlayer />} />
           <Route path="/courts" element={<Courts />} />
+          <Route path="/pong" element={<Pong />} />
         </Routes>
       </Layout>
     </BrowserRouter>
