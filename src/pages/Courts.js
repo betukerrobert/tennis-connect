@@ -5,7 +5,7 @@ const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 function Courts() {
   const mapRef = useRef(null);
-  const hiddenMapRef = useRef(null); // hidden map used to power Places search in list view
+  const hiddenMapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const hiddenMapInstanceRef = useRef(null);
   const markersRef = useRef([]);
@@ -24,8 +24,9 @@ function Courts() {
   const [search, setSearch] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [pendingCourtFocus, setPendingCourtFocus] = useState(null);
 
-  // ── Load Google Maps script ──────────────────────────────────────────
+  // ── Load Google Maps with callback ───────────────────────────────────
   useEffect(() => {
     if (window.google && window.google.maps) {
       setMapsLoaded(true);
@@ -33,15 +34,15 @@ function Courts() {
     }
     const existingScript = document.getElementById('google-maps-script');
     if (existingScript) {
-      existingScript.addEventListener('load', () => setMapsLoaded(true));
+      window.initGoogleMaps = () => setMapsLoaded(true);
       return;
     }
+    window.initGoogleMaps = () => setMapsLoaded(true);
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initGoogleMaps`;
     script.async = true;
     script.defer = true;
-    script.onload = () => setMapsLoaded(true);
     document.head.appendChild(script);
   }, []);
 
@@ -63,7 +64,6 @@ function Courts() {
           }
         }
       }
-
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -92,7 +92,6 @@ function Courts() {
   const searchNearbyCourts = useCallback((mapInstance) => {
     if (!userLocation || placesSearchedRef.current) return;
     placesSearchedRef.current = true;
-
     const service = new window.google.maps.places.PlacesService(mapInstance);
     service.nearbySearch(
       { location: userLocation, radius: 10000, keyword: 'tennis court' },
@@ -119,7 +118,6 @@ function Courts() {
   useEffect(() => {
     if (!mapsLoaded || !userLocation || !hiddenMapRef.current) return;
     if (hiddenMapInstanceRef.current) return;
-
     const hiddenMap = new window.google.maps.Map(hiddenMapRef.current, {
       center: userLocation,
       zoom: 13,
@@ -128,15 +126,20 @@ function Courts() {
     searchNearbyCourts(hiddenMap);
   }, [mapsLoaded, userLocation, searchNearbyCourts]);
 
-  // ── Init visible map when switching to map view ──────────────────────
+  // ── Init visible map ─────────────────────────────────────────────────
   useEffect(() => {
     if (view !== 'map' || !mapsLoaded || !userLocation || !mapRef.current) return;
-    if (mapInstanceRef.current) return;
 
+    mapInstanceRef.current = null;
+
+    const center = pendingCourtFocus
+      ? { lat: pendingCourtFocus.lat, lng: pendingCourtFocus.lng }
+      : userLocation;
+
+    // No custom styles — plain map loads tiles most reliably
     const map = new window.google.maps.Map(mapRef.current, {
-      center: userLocation,
-      zoom: 13,
-      styles: mapStyles,
+      center,
+      zoom: pendingCourtFocus ? 16 : 13,
       disableDefaultUI: true,
       zoomControl: true,
     });
@@ -155,22 +158,25 @@ function Courts() {
       },
       title: 'You are here',
     });
-  }, [view, mapsLoaded, userLocation]);
+
+    setTimeout(() => {
+      map.setCenter(center);
+    }, 150);
+
+    setPendingCourtFocus(null);
+  }, [view, mapsLoaded, userLocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Add court markers to visible map ────────────────────────────────
   useEffect(() => {
     if (!mapInstanceRef.current || !mapsLoaded || view !== 'map') return;
-
     markersRef.current.forEach(m => m.setMap(null));
     markersRef.current = [];
-
     const allCourts = [
       ...nearbyCourts,
       ...courts.filter(c => c.latitude && c.longitude).map(c => ({
         ...c, lat: c.latitude, lng: c.longitude, source: 'user',
       })),
     ];
-
     allCourts.forEach(court => {
       const marker = new window.google.maps.Marker({
         position: { lat: court.lat, lng: court.lng },
@@ -194,7 +200,6 @@ function Courts() {
   const handleAddCourt = async () => {
     if (!addForm.name || !addForm.address) return;
     setAddingCourt(true);
-
     let lat = null, lng = null;
     if (mapsLoaded) {
       const geocoder = new window.google.maps.Geocoder();
@@ -208,7 +213,6 @@ function Courts() {
         });
       });
     }
-
     const { data, error } = await supabase
       .from('courts')
       .insert({
@@ -222,7 +226,6 @@ function Courts() {
       })
       .select()
       .single();
-
     if (!error && data) {
       setCourts(prev => [data, ...prev]);
       setAddForm({ name: '', address: '', surface: 'hard', notes: '' });
@@ -231,11 +234,21 @@ function Courts() {
     setAddingCourt(false);
   };
 
+  // ── Directions with user location as origin ──────────────────────────
   const getDirections = (court) => {
     const dest = court.lat && court.lng
       ? `${court.lat},${court.lng}`
       : encodeURIComponent(court.address);
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
+    const origin = userLocation ? `${userLocation.lat},${userLocation.lng}` : '';
+    const originParam = origin ? `&origin=${origin}` : '';
+    window.open(`https://www.google.com/maps/dir/?api=1${originParam}&destination=${dest}`, '_blank');
+  };
+
+  // ── View on Map ──────────────────────────────────────────────────────
+  const handleViewOnMap = (court) => {
+    setPendingCourtFocus(court);
+    setSelectedCourt(court);
+    setView('map');
   };
 
   const allCourts = [
@@ -258,7 +271,7 @@ function Courts() {
   return (
     <div style={styles.container}>
 
-      {/* Hidden map div — powers Places API even in list view */}
+      {/* Hidden map div */}
       <div ref={hiddenMapRef} style={{ width: '1px', height: '1px', position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
 
       {/* Header */}
@@ -267,9 +280,7 @@ function Courts() {
           <h1 style={styles.pageTitle}>Court Finder</h1>
           <p style={styles.pageSubtitle}>Find tennis courts near you</p>
         </div>
-        <button style={styles.addBtn} onClick={() => setShowAddForm(true)}>
-          + Add Court
-        </button>
+        <button style={styles.addBtn} onClick={() => setShowAddForm(true)}>+ Add Court</button>
       </div>
 
       {/* Search */}
@@ -291,15 +302,11 @@ function Courts() {
         <button
           style={{ ...styles.toggleBtn, ...(view === 'list' ? styles.toggleActive : {}) }}
           onClick={() => setView('list')}
-        >
-          📋 List
-        </button>
+        >📋 List</button>
         <button
           style={{ ...styles.toggleBtn, ...(view === 'map' ? styles.toggleActive : {}) }}
           onClick={() => setView('map')}
-        >
-          🗺️ Map
-        </button>
+        >🗺️ Map</button>
       </div>
 
       {/* Map View */}
@@ -377,19 +384,7 @@ function Courts() {
                         <button style={styles.directionsBtn} onClick={() => getDirections(court)}>
                           🧭 Directions
                         </button>
-                        <button
-                          style={styles.mapViewBtn}
-                          onClick={() => {
-                            setSelectedCourt(court);
-                            setView('map');
-                            setTimeout(() => {
-                              if (mapInstanceRef.current) {
-                                mapInstanceRef.current.setCenter({ lat: court.lat, lng: court.lng });
-                                mapInstanceRef.current.setZoom(16);
-                              }
-                            }, 300);
-                          }}
-                        >
+                        <button style={styles.mapViewBtn} onClick={() => handleViewOnMap(court)}>
                           🗺️
                         </button>
                       </div>
@@ -410,7 +405,6 @@ function Courts() {
               <h2 style={styles.modalTitle}>Add a Court</h2>
               <button style={styles.modalClose} onClick={() => setShowAddForm(false)}>✕</button>
             </div>
-
             {!isVenue ? (
               <div style={styles.venueOnlyBox}>
                 <span style={styles.venueOnlyIcon}>🏟️</span>
@@ -422,14 +416,11 @@ function Courts() {
                 <p style={styles.venueOnlyText}>
                   If you manage a court or club, create a Venue account to list your facility here.
                 </p>
-                <button style={styles.venueOnlyBtn} onClick={() => setShowAddForm(false)}>
-                  Got it
-                </button>
+                <button style={styles.venueOnlyBtn} onClick={() => setShowAddForm(false)}>Got it</button>
               </div>
             ) : (
               <>
                 <p style={styles.modalSubtitle}>Add your court so players can find and book it!</p>
-
                 <div style={styles.formGroup}>
                   <label style={styles.label}>Court Name *</label>
                   <input
@@ -439,7 +430,6 @@ function Courts() {
                     onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
                   />
                 </div>
-
                 <div style={styles.formGroup}>
                   <label style={styles.label}>Address *</label>
                   <input
@@ -449,7 +439,6 @@ function Courts() {
                     onChange={e => setAddForm(p => ({ ...p, address: e.target.value }))}
                   />
                 </div>
-
                 <div style={styles.formGroup}>
                   <label style={styles.label}>Surface Type</label>
                   <div style={styles.surfaceRow}>
@@ -469,7 +458,6 @@ function Courts() {
                     ))}
                   </div>
                 </div>
-
                 <div style={styles.formGroup}>
                   <label style={styles.label}>Notes (optional)</label>
                   <input
@@ -479,7 +467,6 @@ function Courts() {
                     onChange={e => setAddForm(p => ({ ...p, notes: e.target.value }))}
                   />
                 </div>
-
                 <button
                   style={{
                     ...styles.submitBtn,
@@ -499,17 +486,6 @@ function Courts() {
     </div>
   );
 }
-
-const mapStyles = [
-  { elementType: 'geometry', stylers: [{ color: '#f4f6f8' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#0a1628' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c8e6f5' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e4ea' }] },
-  { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#d4edda' }] },
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-];
 
 const styles = {
   container: {
@@ -595,13 +571,14 @@ const styles = {
   mapWrapper: {
     position: 'relative',
     borderRadius: '16px',
-    overflow: 'hidden',
+    // overflow hidden removed — it prevents map tiles from loading
     boxShadow: '0 4px 20px rgba(10,22,40,0.1)',
     marginBottom: '16px',
   },
   map: {
     width: '100%',
     height: '420px',
+    borderRadius: '16px',
   },
   mapPopup: {
     position: 'absolute',
