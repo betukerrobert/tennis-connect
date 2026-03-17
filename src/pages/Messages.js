@@ -1,15 +1,79 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { roleColors, roleLabels } from '../theme';
-
-const DUMMY_MESSAGES = [
-  { id: 1, name: 'Alex Johnson', lastMessage: 'Hey, are you free this Saturday?', time: '2m ago', unread: true, role: 'player' },
-  { id: 2, name: 'Sarah Williams', lastMessage: 'I can do a trial session on Monday!', time: '1h ago', unread: true, role: 'coach' },
-  { id: 3, name: 'City Tennis Club', lastMessage: 'Court 3 is available from 6pm.', time: '3h ago', unread: false, role: 'venue' },
-  { id: 4, name: 'Marco Rossi', lastMessage: 'Great match yesterday!', time: 'Yesterday', unread: false, role: 'player' },
-];
+import { supabase } from '../supabase';
 
 function Messages() {
   const navigate = useNavigate();
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get all messages involving this user, ordered by most recent
+      const { data: messages } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          sender:profiles!messages_sender_id_fkey(id, full_name, avatar_url, role),
+          receiver:profiles!messages_receiver_id_fkey(id, full_name, avatar_url, role)
+        `)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (!messages) { setLoading(false); return; }
+
+      // Deduplicate into one conversation per other user
+      const seen = new Set();
+      const convos = [];
+      for (const msg of messages) {
+        const otherId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+        if (seen.has(otherId)) continue;
+        seen.add(otherId);
+        const otherProfile = msg.sender_id === user.id ? msg.receiver : msg.sender;
+        const unread = msg.receiver_id === user.id && msg.read === false;
+        convos.push({
+          otherId,
+          otherProfile,
+          lastMessage: msg.content,
+          time: formatTime(msg.created_at),
+          unread,
+        });
+      }
+
+      setConversations(convos);
+
+      // Mark all messages received by this user as read
+      await supabase
+        .from('messages')
+        .update({ read: true })
+        .eq('receiver_id', user.id)
+        .eq('read', false);
+
+      // Tell Layout to clear the dot immediately
+      window.dispatchEvent(new Event('messages-read'));
+
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const formatTime = (isoStr) => {
+    const date = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
 
   return (
     <div style={styles.container}>
@@ -19,54 +83,74 @@ function Messages() {
         <span style={styles.composeBtn}>✏️</span>
       </div>
 
-      <div style={styles.list}>
-        {DUMMY_MESSAGES.map(msg => (
-          <div
-            key={msg.id}
-            style={styles.messageRow}
-            onClick={() => navigate('/chat/' + msg.id)}
-          >
-            <div style={{ ...styles.avatar, backgroundColor: roleColors[msg.role] }}>
-              {msg.name.charAt(0)}
-            </div>
-            <div style={styles.messageInfo}>
-              <div style={styles.messageTop}>
-                <span style={styles.messageName}>{msg.name}</span>
-                <span style={styles.messageTime}>{msg.time}</span>
-              </div>
-              <div style={styles.messageBottom}>
-                <span style={{
-                  ...styles.messagePreview,
-                  fontWeight: msg.unread ? '700' : '400',
-                  color: msg.unread ? '#0a1628' : '#9aa0ac',
-                }}>
-                  {msg.lastMessage}
-                </span>
-                {msg.unread && <div style={styles.unreadDot} />}
-              </div>
-              <span style={{ ...styles.rolePill, backgroundColor: roleColors[msg.role] + '18', color: roleColors[msg.role] }}>
-                {roleLabels[msg.role]}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div style={styles.loadingContainer}>
+          <div style={styles.loadingSpinner} />
+        </div>
+      ) : conversations.length === 0 ? (
+        <div style={styles.emptyContainer}>
+          <span style={{ fontSize: '40px' }}>💬</span>
+          <p style={styles.emptyText}>No messages yet</p>
+          <p style={styles.emptySub}>Connect with players to start chatting</p>
+          <button style={styles.discoverBtn} onClick={() => navigate('/discovery')}>
+            Find Players
+          </button>
+        </div>
+      ) : (
+        <div style={styles.list}>
+          {conversations.map(conv => {
+            const profile = conv.otherProfile;
+            const role = profile?.role;
+            return (
+              <div
+                key={conv.otherId}
+                style={styles.messageRow}
+                onClick={() => navigate('/chat/' + conv.otherId)}
+              >
+                {/* Tappable avatar → opens profile */}
+                <div
+                  style={{ ...styles.avatar, backgroundColor: roleColors[role] || '#0a1628', overflow: 'hidden' }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/profile/${conv.otherId}`); }}
+                >
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    profile?.full_name?.charAt(0) || '?'
+                  )}
+                </div>
 
-      <div style={styles.bottomNav}>
-        <div style={styles.navItem} onClick={() => navigate('/discovery')}>
-          <span style={styles.navIcon}>🔍</span>
-          <span style={styles.navLabel}>Discover</span>
+                <div style={styles.messageInfo}>
+                  <div style={styles.messageTop}>
+                    {/* Tappable name → opens profile */}
+                    <span
+                      style={{ ...styles.messageName, cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/profile/${conv.otherId}`); }}
+                    >
+                      {profile?.full_name || 'Unknown'}
+                    </span>
+                    <span style={styles.messageTime}>{conv.time}</span>
+                  </div>
+                  <div style={styles.messageBottom}>
+                    <span style={{
+                      ...styles.messagePreview,
+                      fontWeight: conv.unread ? '700' : '400',
+                      color: conv.unread ? '#0a1628' : '#9aa0ac',
+                    }}>
+                      {conv.lastMessage}
+                    </span>
+                    {conv.unread && <div style={styles.unreadDot} />}
+                  </div>
+                  {role && (
+                    <span style={{ ...styles.rolePill, backgroundColor: (roleColors[role] || '#0a1628') + '18', color: roleColors[role] || '#0a1628' }}>
+                      {roleLabels[role]}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div style={styles.navItem}>
-          <span style={styles.navIcon}>💬</span>
-          <span style={styles.navLabelActive}>Messages</span>
-        </div>
-        <div style={styles.navItem} onClick={() => navigate('/profile')}>
-          <span style={styles.navIcon}>👤</span>
-          <span style={styles.navLabel}>Profile</span>
-        </div>
-      </div>
-
+      )}
     </div>
   );
 }
@@ -97,6 +181,49 @@ const styles = {
     fontSize: '20px',
     cursor: 'pointer',
   },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '60px 20px',
+  },
+  loadingSpinner: {
+    width: '28px',
+    height: '28px',
+    border: '3px solid #e0e4ea',
+    borderTop: '3px solid #0a1628',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  emptyContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '60px 20px',
+    gap: '10px',
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#0a1628',
+    margin: '0',
+  },
+  emptySub: {
+    fontSize: '13px',
+    color: '#9aa0ac',
+    margin: '0',
+  },
+  discoverBtn: {
+    marginTop: '8px',
+    backgroundColor: '#0a1628',
+    color: '#c8ff00',
+    border: 'none',
+    borderRadius: '999px',
+    padding: '10px 24px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
   list: {
     marginTop: '12px',
     backgroundColor: 'white',
@@ -125,6 +252,7 @@ const styles = {
     fontSize: '20px',
     fontWeight: '800',
     flexShrink: 0,
+    cursor: 'pointer',
   },
   messageInfo: {
     flex: 1,
@@ -172,38 +300,6 @@ const styles = {
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: '0.3px',
-  },
-  bottomNav: {
-    position: 'fixed',
-    bottom: '0',
-    width: '100%',
-    maxWidth: '480px',
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    display: 'flex',
-    justifyContent: 'space-around',
-    padding: '12px 0 16px 0',
-    zIndex: 100,
-  },
-  navItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    cursor: 'pointer',
-    gap: '3px',
-  },
-  navIcon: { fontSize: '22px' },
-  navLabel: {
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  navLabelActive: {
-    fontSize: '10px',
-    color: '#c8ff00',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    fontWeight: 'bold',
   },
 };
 

@@ -8,11 +8,14 @@ function Login() {
   const [focused, setFocused] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [screen, setScreen] = useState('login'); // 'login' | 'forgot' | 'sent'
 
   const [form, setForm] = useState({
     email: '',
     password: '',
   });
+
+  const [resetEmail, setResetEmail] = useState('');
 
   const handleChange = (id, value) => {
     setForm(prev => ({ ...prev, [id]: value }));
@@ -45,6 +48,119 @@ function Login() {
     }
   };
 
+  const handleForgotPassword = () => {
+    setResetEmail(form.email); // pre-fill with whatever they typed
+    setError(null);
+    setScreen('forgot');
+  };
+
+  const handleSendReset = async () => {
+    if (!resetEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (resetError) throw resetError;
+
+      setScreen('sent');
+    } catch (err) {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── SENT SCREEN ───────────────────────────────────────────────
+  if (screen === 'sent') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.header}>
+          <span style={styles.backButton} onClick={() => { setScreen('login'); setError(null); }}>← Back to Login</span>
+          <h1 style={styles.title}>Check Your Email</h1>
+          <p style={styles.subtitle}>Password reset instructions sent</p>
+        </div>
+        <div style={styles.form}>
+          <div style={styles.successBox}>
+            <div style={styles.successIcon}>✉️</div>
+            <p style={styles.successText}>
+              We sent a reset link to <strong>{resetEmail}</strong>. Click the link in the email to set a new password.
+            </p>
+            <p style={styles.successHint}>
+              Didn't get it? Check your spam folder.
+            </p>
+          </div>
+          <button
+            style={{ ...styles.button, backgroundColor: '#0a1628', color: '#c8ff00', cursor: 'pointer' }}
+            onClick={() => { setScreen('login'); setError(null); }}
+          >
+            Back to Login →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── FORGOT SCREEN ─────────────────────────────────────────────
+  if (screen === 'forgot') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.header}>
+          <span style={styles.backButton} onClick={() => { setScreen('login'); setError(null); }}>← Back to Login</span>
+          <h1 style={styles.title}>Reset Password</h1>
+          <p style={styles.subtitle}>We'll send you a link to reset your password</p>
+        </div>
+        <div style={styles.form}>
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>Email</label>
+            <input
+              style={{
+                ...styles.input,
+                borderColor: focused === 'resetEmail' ? theme.colors.accent : '#e0e4ea',
+                boxShadow: focused === 'resetEmail' ? `0 0 0 3px ${theme.colors.accent}18` : 'none',
+                transition: 'all 0.2s ease',
+              }}
+              type="email"
+              placeholder="your@email.com"
+              value={resetEmail}
+              onChange={e => { setResetEmail(e.target.value); setError(null); }}
+              onFocus={() => setFocused('resetEmail')}
+              onBlur={() => setFocused(null)}
+              onKeyDown={e => e.key === 'Enter' && handleSendReset()}
+            />
+          </div>
+
+          {error && (
+            <div style={styles.errorBox}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <button
+            style={{
+              ...styles.button,
+              backgroundColor: loading ? '#e0e4ea' : '#0a1628',
+              color: loading ? '#9aa0ac' : '#c8ff00',
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
+            onClick={handleSendReset}
+            disabled={loading}
+          >
+            {loading ? 'Sending...' : 'Send Reset Link →'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── LOGIN SCREEN ──────────────────────────────────────────────
   return (
     <div style={styles.container}>
 
@@ -94,7 +210,9 @@ function Login() {
           />
         </div>
 
-        <p style={styles.forgotPassword}>Forgot your password?</p>
+        <p style={styles.forgotPassword} onClick={handleForgotPassword}>
+          Forgot your password?
+        </p>
 
         {error && (
           <div style={styles.errorBox}>
@@ -242,6 +360,31 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
+  },
+  successBox: {
+    backgroundColor: 'white',
+    border: '1.5px solid #e0e4ea',
+    borderRadius: '14px',
+    padding: '28px 20px',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  successIcon: {
+    fontSize: '36px',
+  },
+  successText: {
+    fontSize: '14px',
+    color: '#0a1628',
+    margin: '0',
+    lineHeight: '1.6',
+  },
+  successHint: {
+    fontSize: '12px',
+    color: '#9aa0ac',
+    margin: '0',
   },
 };
 

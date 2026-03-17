@@ -36,7 +36,6 @@ function SwipeMode({ onClose, users = [] }) {
       const bonus = profile.pong_bonus_swipes || 0;
       let usedToday = profile.swipes_used_today || 0;
 
-      // Reset daily counter if it's a new day
       if (profile.swipe_last_reset_date !== today) {
         await supabase
           .from('profiles')
@@ -59,7 +58,6 @@ function SwipeMode({ onClose, users = [] }) {
     const newUsed = swipesUsed + 1;
     setSwipesUsed(newUsed);
 
-    // If using a bonus swipe, deduct it
     const newBonus = newUsed > FREE_DAILY_SWIPES ? Math.max(0, bonusSwipes - 1) : bonusSwipes;
     if (newUsed > FREE_DAILY_SWIPES && bonusSwipes > 0) {
       setBonusSwipes(newBonus);
@@ -78,7 +76,6 @@ function SwipeMode({ onClose, users = [] }) {
   const swipesLeft = Math.max(0, swipesAllowed - swipesUsed);
   const outOfSwipes = !loadingLimits && swipesLeft === 0;
 
-  // Filter out current user from the swipe deck
   const deck = users.filter(u => u.id !== currentUser?.id);
   const current = deck[currentIndex];
   const next = deck[currentIndex + 1];
@@ -177,14 +174,28 @@ function SwipeMode({ onClose, users = [] }) {
         <div style={styles.emptyEmoji}>⏳</div>
         <h2 style={styles.emptyTitle}>No swipes left today</h2>
         <p style={styles.emptySubtitle}>
-          You've used all {FREE_DAILY_SWIPES} free swipes for today.
-          {bonusSwipes === 0
-            ? ' Beat the CPU in Pong to earn a bonus swipe!'
-            : ` You have ${bonusSwipes} bonus swipe${bonusSwipes > 1 ? 's' : ''} — refresh to use them.`
-          }
+          You've used all {FREE_DAILY_SWIPES} free daily swipes.{'\n'}Come back tomorrow for a fresh set!
         </p>
+
+        {/* Pong habit loop nudge card */}
+        <div style={styles.pongNudgeCard}>
+          <div style={styles.pongNudgeIcon}>
+            <span style={styles.pongRetroIcon}>▌●▐</span>
+          </div>
+          <div style={styles.pongNudgeText}>
+            <p style={styles.pongNudgeTitle}>Play Pong every day</p>
+            <p style={styles.pongNudgeSubtitle}>Win once → earn a free bonus swipe 🏓</p>
+          </div>
+        </div>
+
+        {bonusSwipes > 0 && (
+          <p style={styles.bonusNote}>
+            You have {bonusSwipes} bonus swipe{bonusSwipes > 1 ? 's' : ''} ready — refresh to use them.
+          </p>
+        )}
+
         <button style={styles.pongBtn} onClick={onClose}>
-          🏓 Play Pong to earn more
+          🏓 Play Pong now
         </button>
         <button style={{ ...styles.emptyBtn, marginTop: '10px' }} onClick={onClose}>
           Back to Browse
@@ -349,8 +360,6 @@ const styles = {
     margin: '0', letterSpacing: '-0.2px',
   },
   counter: { fontSize: '12px', color: '#9aa0ac', fontWeight: '400' },
-
-  // Swipe limit bar
   limitBar: {
     width: '100%',
     maxWidth: '340px',
@@ -382,7 +391,6 @@ const styles = {
     borderRadius: '999px',
     transition: 'width 0.3s ease, background-color 0.3s ease',
   },
-
   cardStack: {
     position: 'relative',
     width: '340px',
@@ -496,7 +504,62 @@ const styles = {
   },
   emptyEmoji: { fontSize: '56px', marginBottom: '16px' },
   emptyTitle: { fontSize: '22px', fontWeight: '600', color: '#0a1628', margin: '0 0 8px 0' },
-  emptySubtitle: { fontSize: '13px', color: '#9aa0ac', margin: '0 0 32px 0', lineHeight: '1.6', fontWeight: '400' },
+  emptySubtitle: { fontSize: '13px', color: '#9aa0ac', margin: '0 0 24px 0', lineHeight: '1.6', fontWeight: '400' },
+
+  // Pong nudge card
+  pongNudgeCard: {
+    backgroundColor: '#0a1628',
+    borderRadius: '14px',
+    padding: '14px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    maxWidth: '320px',
+    marginBottom: '20px',
+    boxShadow: '0 4px 16px rgba(10,22,40,0.2)',
+  },
+  pongNudgeIcon: {
+    width: '40px',
+    height: '40px',
+    backgroundColor: 'rgba(200,255,0,0.1)',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  pongRetroIcon: {
+    fontSize: '13px',
+    color: '#c8ff00',
+    fontFamily: "'Courier New', monospace",
+    letterSpacing: '1px',
+    fontWeight: '700',
+  },
+  pongNudgeText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    textAlign: 'left',
+  },
+  pongNudgeTitle: {
+    margin: '0',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: 'white',
+  },
+  pongNudgeSubtitle: {
+    margin: '0',
+    fontSize: '11px',
+    color: '#8ba0b8',
+    fontFamily: "'Courier New', monospace",
+  },
+  bonusNote: {
+    fontSize: '12px',
+    color: '#10b981',
+    fontWeight: '500',
+    margin: '0 0 16px 0',
+  },
   pongBtn: {
     backgroundColor: '#0a1628', color: '#c8ff00', padding: '13px 32px',
     borderRadius: '12px', border: 'none', fontSize: '14px', fontWeight: '600', cursor: 'pointer',

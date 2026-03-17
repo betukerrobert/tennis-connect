@@ -1,84 +1,187 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { roleColors } from '../theme';
-
-const DUMMY_CHATS = {
-  1: { name: 'Alex Johnson', role: 'player', messages: [
-    { id: 1, text: 'Hey! I saw your profile, want to hit some balls this weekend?', mine: false },
-    { id: 2, text: 'Hey Alex! Sure, sounds great!', mine: true },
-    { id: 3, text: 'Are you free this Saturday?', mine: false },
-  ]},
-  2: { name: 'Sarah Williams', role: 'coach', messages: [
-    { id: 1, text: 'Hi! I checked your profile, I think I can really help you improve your game.', mine: false },
-    { id: 2, text: 'That sounds amazing, what are your rates?', mine: true },
-    { id: 3, text: 'I can do a trial session on Monday!', mine: false },
-  ]},
-  3: { name: 'City Tennis Club', role: 'venue', messages: [
-    { id: 1, text: 'Hello! Thanks for your interest in our club.', mine: false },
-    { id: 2, text: 'Do you have courts available this evening?', mine: true },
-    { id: 3, text: 'Court 3 is available from 6pm.', mine: false },
-  ]},
-  4: { name: 'Marco Rossi', role: 'player', messages: [
-    { id: 1, text: 'Great match yesterday!', mine: false },
-    { id: 2, text: 'Thanks! You were tough to beat haha', mine: true },
-  ]},
-};
+import { supabase } from '../supabase';
 
 function Chat() {
-  const { id } = useParams();
+  const { id: otherUserId } = useParams();
   const navigate = useNavigate();
-  const chat = DUMMY_CHATS[id];
-  const [messages, setMessages] = useState(chat ? chat.messages : []);
-  const [input, setInput] = useState('');
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-    setMessages([...messages, { id: messages.length + 1, text: input, mine: true }]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [otherProfile, setOtherProfile] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { navigate('/login'); return; }
+      setCurrentUser(user);
+
+      // Load the other person's profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, role')
+        .eq('id', otherUserId)
+        .single();
+      if (profile) setOtherProfile(profile);
+
+      // Mark as read and immediately fire event so Layout clears the dot
+      await supabase
+        .from('messages')
+        .update({ read: true })
+        .eq('receiver_id', user.id)
+        .eq('sender_id', otherUserId)
+        .eq('read', false);
+      window.dispatchEvent(new Event('messages-read'));
+
+      // Load messages
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('*')
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
+        )
+        .order('created_at', { ascending: true });
+
+      if (msgs) setMessages(msgs);
+      setLoading(false);
+    };
+    load();
+  }, [otherUserId, navigate]);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Real-time subscription for new messages
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel('chat-' + otherUserId)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `receiver_id=eq.${currentUser.id}`,
+      }, async (payload) => {
+        if (payload.new.sender_id === otherUserId) {
+          setMessages(prev => [...prev, payload.new]);
+          // Mark it as read immediately since user is looking at the chat
+          await supabase
+            .from('messages')
+            .update({ read: true })
+            .eq('id', payload.new.id);
+          window.dispatchEvent(new Event('messages-read'));
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [currentUser, otherUserId]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || !currentUser) return;
+    const text = input.trim();
     setInput('');
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: currentUser.id,
+        receiver_id: otherUserId,
+        content: text,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setMessages(prev => [...prev, data]);
+    }
   };
 
-  if (!chat) return <div style={{ padding: '20px' }}>Chat not found</div>;
+  if (loading) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.loadingSpinner} />
+      </div>
+    );
+  }
 
-  const accentColor = roleColors[chat.role];
+  if (!otherProfile) {
+    return (
+      <div style={styles.loadingContainer}>
+        <p style={{ color: '#9aa0ac', fontSize: '14px' }}>User not found.</p>
+        <span style={{ cursor: 'pointer', color: '#0a1628', fontSize: '13px' }} onClick={() => navigate(-1)}>← Go back</span>
+      </div>
+    );
+  }
+
+  const accentColor = roleColors[otherProfile.role] || '#0a1628';
+  const initials = otherProfile.full_name?.charAt(0) || '?';
 
   return (
     <div style={styles.container}>
 
-      <div style={{ ...styles.header, borderBottom: `3px solid ${accentColor}` }}>
+      {/* Header */}
+      <div style={styles.header}>
         <span style={styles.backButton} onClick={() => navigate('/messages')}>←</span>
-        <div style={{ ...styles.avatar, backgroundColor: accentColor }}>
-          {chat.name.charAt(0)}
-        </div>
-        <div>
-          <h2 style={styles.headerName}>{chat.name}</h2>
-          <span style={{ ...styles.onlineStatus, color: accentColor }}>● Online</span>
-        </div>
-      </div>
-
-      <div style={styles.messageList}>
-        {messages.map((msg, index) => (
-          <div
-            key={msg.id}
-            style={{
-              display: 'flex',
-              justifyContent: msg.mine ? 'flex-end' : 'flex-start',
-              animation: index === messages.length - 1 ? 'fadeIn 0.2s ease' : 'none',
-            }}
-          >
-            <div style={{
-              ...styles.messageBubble,
-              backgroundColor: msg.mine ? '#0a1628' : 'white',
-              color: msg.mine ? '#c8ff00' : '#0a1628',
-              borderBottomRightRadius: msg.mine ? '4px' : '18px',
-              borderBottomLeftRadius: msg.mine ? '18px' : '4px',
-              boxShadow: msg.mine ? 'none' : '0 2px 8px rgba(10,22,40,0.08)',
-            }}>
-              {msg.text}
+        <div
+          style={{ ...styles.avatarWrapper, cursor: 'pointer' }}
+          onClick={() => navigate(`/profile/${otherUserId}`)}
+        >
+          {otherProfile.avatar_url ? (
+            <img src={otherProfile.avatar_url} alt="" style={styles.avatarImg} />
+          ) : (
+            <div style={{ ...styles.avatar, backgroundColor: accentColor }}>
+              {initials}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+        <div
+          style={{ cursor: 'pointer' }}
+          onClick={() => navigate(`/profile/${otherUserId}`)}
+        >
+          <h2 style={styles.headerName}>{otherProfile.full_name || 'Unknown'}</h2>
+          <span style={styles.headerRole}>{otherProfile.role ? otherProfile.role.charAt(0).toUpperCase() + otherProfile.role.slice(1) : 'Member'}</span>
+        </div>
       </div>
 
+      {/* Messages */}
+      <div style={styles.messageList}>
+        {messages.length === 0 && (
+          <div style={styles.emptyChat}>
+            <p style={styles.emptyChatText}>No messages yet — say hello! 👋</p>
+          </div>
+        )}
+        {messages.map((msg) => {
+          const mine = msg.sender_id === currentUser?.id;
+          return (
+            <div
+              key={msg.id}
+              style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}
+            >
+              <div style={{
+                ...styles.messageBubble,
+                backgroundColor: mine ? '#0a1628' : 'white',
+                color: mine ? '#c8ff00' : '#0a1628',
+                borderBottomRightRadius: mine ? '4px' : '18px',
+                borderBottomLeftRadius: mine ? '18px' : '4px',
+                boxShadow: mine ? 'none' : '0 2px 8px rgba(10,22,40,0.08)',
+              }}>
+                {msg.content}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
       <div style={styles.inputRow}>
         <input
           style={styles.input}
@@ -110,6 +213,22 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
   },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100vh',
+    gap: '12px',
+  },
+  loadingSpinner: {
+    width: '28px',
+    height: '28px',
+    border: '3px solid #e0e4ea',
+    borderTop: '3px solid #0a1628',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
   header: {
     background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
     padding: '16px 20px',
@@ -123,6 +242,13 @@ const styles = {
     cursor: 'pointer',
     fontWeight: '700',
   },
+  avatarWrapper: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
   avatar: {
     width: '38px',
     height: '38px',
@@ -133,7 +259,11 @@ const styles = {
     justifyContent: 'center',
     fontSize: '16px',
     fontWeight: '800',
-    flexShrink: 0,
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
   },
   headerName: {
     color: 'white',
@@ -141,9 +271,10 @@ const styles = {
     fontWeight: '800',
     margin: '0 0 2px 0',
   },
-  onlineStatus: {
+  headerRole: {
     fontSize: '11px',
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '400',
   },
   messageList: {
     flex: 1,
@@ -152,6 +283,18 @@ const styles = {
     flexDirection: 'column',
     gap: '10px',
     overflowY: 'auto',
+  },
+  emptyChat: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 0',
+  },
+  emptyChatText: {
+    fontSize: '13px',
+    color: '#9aa0ac',
+    textAlign: 'center',
   },
   messageBubble: {
     maxWidth: '75%',

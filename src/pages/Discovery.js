@@ -254,16 +254,27 @@ function Discovery() {
                   onMouseLeave={() => setPressed(null)}
                 >
                   <div style={styles.cardTop}>
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt="avatar" style={styles.avatarPhoto} />
-                    ) : (
-                      <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] || '#0a1628' }}>
-                        {user.full_name ? user.full_name.charAt(0).toUpperCase() : '?'}
-                      </div>
-                    )}
+                    {/* Tappable avatar + name → opens profile */}
+                    <div
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/profile/${user.id}`)}
+                    >
+                      {user.avatar_url ? (
+                        <img src={user.avatar_url} alt="avatar" style={styles.avatarPhoto} />
+                      ) : (
+                        <div style={{ ...styles.avatar, backgroundColor: roleColors[user.role] || '#0a1628' }}>
+                          {user.full_name ? user.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                      )}
+                    </div>
                     <div style={styles.cardInfo}>
                       <div style={styles.cardNameRow}>
-                        <h3 style={styles.cardName}>{user.full_name || 'Unknown'}</h3>
+                        <h3
+                          style={{ ...styles.cardName, cursor: 'pointer' }}
+                          onClick={() => navigate(`/profile/${user.id}`)}
+                        >
+                          {user.full_name || 'Unknown'}
+                        </h3>
                         {user.role && (
                           <span style={{ ...styles.roleBadge, backgroundColor: roleColors[user.role] + '15', color: roleColors[user.role] }}>
                             {roleLabels[user.role]}
@@ -360,7 +371,7 @@ const styles = {
   loadingText: { fontSize: '13px', color: '#9aa0ac', fontWeight: '400' },
   resultsCount: { fontSize: '11px', color: '#9aa0ac', margin: '0 0 12px 0', fontWeight: '400', textTransform: 'uppercase', letterSpacing: '1px' },
   feed: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' },
-  card: { backgroundColor: 'white', borderRadius: '14px', padding: '18px', boxShadow: '0 2px 10px rgba(10,22,40,0.06)', cursor: 'pointer' },
+  card: { backgroundColor: 'white', borderRadius: '14px', padding: '18px', boxShadow: '0 2px 10px rgba(10,22,40,0.06)', cursor: 'default' },
   cardTop: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' },
   avatar: { width: '46px', height: '46px', borderRadius: '12px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '600', flexShrink: 0 },
   avatarPhoto: { width: '46px', height: '46px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 },

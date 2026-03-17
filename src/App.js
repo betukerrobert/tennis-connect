@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Discovery from './pages/Discovery';
 import Profile from './pages/Profile';
+import UserProfile from './pages/UserProfile';
 import Messages from './pages/Messages';
 import Chat from './pages/Chat';
 import ScheduleMatch from './pages/ScheduleMatch';
@@ -14,6 +15,7 @@ import MatchInvite from './pages/MatchInvite';
 import RatePlayer from './pages/RatePlayer';
 import Courts from './pages/Courts';
 import Pong from './pages/Pong';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -23,9 +25,11 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/signup/:role" element={<Signup />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/discovery" element={<Discovery />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:id" element={<UserProfile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/chat/:id" element={<Chat />} />
           <Route path="/schedule/:userId" element={<ScheduleMatch />} />

@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Logo from './Logo';
 import { supabase } from '../supabase';
 import { requestNotificationPermission, onMessageListener } from '../notificationService';
@@ -11,12 +11,47 @@ function Layout({ children }) {
   const [notifications, setNotifications] = useState({
     matches: false,
     messages: false,
+    discovery: false,
   });
+  const [sidebarProfile, setSidebarProfile] = useState(null);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ── Fetch notification state ──────────────────────────────────────────
+  // Accepts currentPath so it doesn't depend on location closure — no stale reads
+  const fetchNotifications = useCallback(async (currentPath) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: pendingMatches } = await supabase
+      .from('matches').select('id')
+      .eq('receiver_id', user.id).eq('status', 'pending');
+
+    const { data: rescheduledMatches } = await supabase
+      .from('matches').select('id')
+      .eq('sender_id', user.id).eq('status', 'rescheduled');
+
+    const { data: pendingConnections } = await supabase
+      .from('connections').select('id')
+      .eq('receiver_id', user.id).eq('status', 'pending');
+
+    const { data: unreadMessages } = await supabase
+      .from('messages').select('id')
+      .eq('receiver_id', user.id).eq('read', false);
+
+    const onMessagesPage = currentPath === '/messages' || currentPath?.startsWith('/chat/');
+
+    console.log('[NOTIF DEBUG] path:', currentPath, '| unread count:', unreadMessages?.length, '| onMessagesPage:', onMessagesPage, '| setting messages dot:', onMessagesPage ? false : unreadMessages?.length > 0);
+
+    setNotifications({
+      matches: (pendingMatches?.length > 0) || (rescheduledMatches?.length > 0),
+      discovery: pendingConnections?.length > 0,
+      messages: onMessagesPage ? false : unreadMessages?.length > 0,
+    });
   }, []);
 
   // ── Silently update user's location in the background ────────────────
@@ -26,8 +61,15 @@ function Layout({ children }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // Request notification permission when user is logged in
       await requestNotificationPermission(user.id);
+
+      // Fetch profile for sidebar display
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single();
+      if (prof) setSidebarProfile(prof);
       
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -45,22 +87,19 @@ function Layout({ children }) {
     };
     updateLocation();
 
-    // Listen for foreground notifications
     onMessageListener()
       .then((payload) => {
         console.log('Received foreground message:', payload);
-        // Show browser notification
         if (Notification.permission === 'granted') {
           new Notification(payload.notification?.title || 'Tennis Connect', {
             body: payload.notification?.body,
             icon: '/logo192.png'
           });
         }
-        // Refresh notification counts
-        fetchNotifications();
+        fetchNotifications(window.location.pathname);
       })
       .catch((err) => console.log('Failed to receive foreground message:', err));
-  }, []);
+  }, [fetchNotifications]);
 
   // ── Redirect to onboarding if profile is incomplete ──────────────────
   useEffect(() => {
@@ -81,48 +120,19 @@ function Layout({ children }) {
     checkOnboarding();
   }, [location.pathname, navigate]);
 
-  // ── Fetch notification state ──────────────────────────────────────────
-  const fetchNotifications = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 1. Pending match invites received by me
-    const { data: pendingMatches } = await supabase
-      .from('matches')
-      .select('id')
-      .eq('receiver_id', user.id)
-      .eq('status', 'pending');
-
-    // 2. Suggested new times sent to me (I am sender, status is rescheduled)
-    const { data: rescheduledMatches } = await supabase
-      .from('matches')
-      .select('id')
-      .eq('sender_id', user.id)
-      .eq('status', 'rescheduled');
-
-    // 3. Pending connection requests received by me
-    const { data: pendingConnections } = await supabase
-      .from('connections')
-      .select('id')
-      .eq('receiver_id', user.id)
-      .eq('status', 'pending');
-
-    const hasMatchNotif =
-      (pendingMatches?.length > 0) ||
-      (rescheduledMatches?.length > 0);
-
-    const hasConnectionNotif = pendingConnections?.length > 0;
-
-    setNotifications({
-      matches: hasMatchNotif,
-      discovery: hasConnectionNotif,
-    });
-  };
-
   useEffect(() => {
-    fetchNotifications();
-  }, [location.pathname]);
-  // ─────────────────────────────────────────────────────────────────────
+    fetchNotifications(location.pathname);
+  }, [fetchNotifications, location.pathname]);
+
+  // Instantly clear messages dot when Chat marks messages as read
+  useEffect(() => {
+    const handler = () => {
+      console.log('[NOTIF DEBUG] messages-read event received — clearing dot');
+      setNotifications(prev => ({ ...prev, messages: false }));
+    };
+    window.addEventListener('messages-read', handler);
+    return () => window.removeEventListener('messages-read', handler);
+  }, []);
 
   const navItems = [
     {
@@ -142,7 +152,7 @@ function Layout({ children }) {
     },
     {
       path: '/messages', label: 'Messages',
-      notif: false,
+      notif: notifications.messages,
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
     },
     {
@@ -156,7 +166,8 @@ function Layout({ children }) {
   const showNav = !noNavPages.includes(location.pathname)
     && !location.pathname.startsWith('/signup')
     && !location.pathname.startsWith('/schedule')
-    && !location.pathname.startsWith('/match-invite');
+    && !location.pathname.startsWith('/match-invite')
+    && !location.pathname.startsWith('/reset-password');
 
   const isActive = (path) => location.pathname === path;
 
@@ -199,9 +210,14 @@ function Layout({ children }) {
 
           <div style={styles.sidebarFooter}>
             <div style={styles.sidebarProfile}>
-              <div style={styles.sidebarAvatar}>R</div>
+              <div style={styles.sidebarAvatar}>
+                {sidebarProfile?.avatar_url
+                  ? <img src={sidebarProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} />
+                  : (sidebarProfile?.full_name?.[0] || '?')
+                }
+              </div>
               <div>
-                <p style={styles.sidebarName}>Robert</p>
+                <p style={styles.sidebarName}>{sidebarProfile?.full_name || 'My Account'}</p>
                 <p style={styles.sidebarPlan}>Free Plan</p>
               </div>
             </div>
