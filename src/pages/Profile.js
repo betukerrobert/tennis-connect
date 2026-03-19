@@ -1,4 +1,3 @@
-import StarRating from '../components/StarRating';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
@@ -12,11 +11,12 @@ function Profile() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({});
+  const [matchStats, setMatchStats] = useState(null);
+  const [connectionsCount, setConnectionsCount] = useState(0);
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchProfile(); fetchMatchStats(); fetchConnectionsCount(); }, []);
 
   const fetchProfile = async () => {
     setLoading(true);
@@ -38,6 +38,44 @@ function Profile() {
     setLoading(false);
   };
 
+  const fetchConnectionsCount = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { count, error } = await supabase
+      .from('connections')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'accepted')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+    if (!error) setConnectionsCount(count || 0);
+  };
+
+  const fetchMatchStats = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: matches } = await supabase
+      .from('matches')
+      .select('id, match_date, result, court_name, status, sender_id, receiver_id')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+      .order('match_date', { ascending: false });
+
+    if (!matches) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const past = matches.filter(m => m.match_date < today && m.status === 'accepted');
+    const withResult = past.filter(m => m.result);
+    const wins = withResult.filter(m => m.result === 'win').length;
+    const losses = withResult.filter(m => m.result === 'loss').length;
+    const winPct = withResult.length > 0 ? Math.round((wins / withResult.length) * 100) : null;
+    const courts = past.filter(m => m.court_name).map(m => m.court_name);
+    const courtCounts = courts.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {});
+    const favCourt = Object.keys(courtCounts).sort((a, b) => courtCounts[b] - courtCounts[a])[0] || null;
+
+    setMatchStats({ total: past.length, wins, losses, winPct, favCourt });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const { error } = await supabase
@@ -49,6 +87,13 @@ function Profile() {
         level: form.level,
         availability: form.availability,
         play_style: form.play_style,
+        preferred_surface: form.preferred_surface,
+        age: form.age ? parseInt(form.age) : null,
+        open_to_sparring: form.open_to_sparring || false,
+        sparring_rate: form.sparring_rate ? parseFloat(form.sparring_rate) : null,
+        also_coaches: form.also_coaches || false,
+        coaching_rate: form.coaching_rate ? parseFloat(form.coaching_rate) : null,
+        coaching_specialisation: form.coaching_specialisation || null,
       })
       .eq('id', profile.id);
 
@@ -94,6 +139,21 @@ function Profile() {
     }
   };
 
+  // Save extras immediately on toggle (no need to be in edit mode)
+  const handleToggleSparring = async () => {
+    const newVal = !profile.open_to_sparring;
+    setProfile(prev => ({ ...prev, open_to_sparring: newVal }));
+    setForm(prev => ({ ...prev, open_to_sparring: newVal }));
+    await supabase.from('profiles').update({ open_to_sparring: newVal }).eq('id', profile.id);
+  };
+
+  const handleToggleCoaching = async () => {
+    const newVal = !profile.also_coaches;
+    setProfile(prev => ({ ...prev, also_coaches: newVal }));
+    setForm(prev => ({ ...prev, also_coaches: newVal }));
+    await supabase.from('profiles').update({ also_coaches: newVal }).eq('id', profile.id);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
@@ -120,6 +180,9 @@ function Profile() {
   const initials = profile.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '?';
+
+  const surfaceOptions = ['Hard', 'Clay', 'Grass', 'Indoor'];
+  const specialisationOptions = ['Beginner', 'Intermediate', 'Advanced', 'Kids'];
 
   return (
     <div style={styles.container}>
@@ -167,6 +230,16 @@ function Profile() {
           {roleLabels[profile.role] || 'Member'}
         </span>
 
+        {/* Extra badges shown in hero */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {profile.open_to_sparring && (
+            <span style={styles.extraBadge}>⚡ Sparring</span>
+          )}
+          {profile.also_coaches && (
+            <span style={{ ...styles.extraBadge, backgroundColor: 'rgba(168,85,247,0.15)', color: '#a855f7', borderColor: 'rgba(168,85,247,0.3)' }}>📋 Coach</span>
+          )}
+        </div>
+
         {editing ? (
           <input
             style={styles.editInput}
@@ -185,7 +258,7 @@ function Profile() {
 
       <div style={styles.statsRow}>
         <div style={styles.statItem}>
-          <span style={styles.statValue}>0</span>
+          <span style={styles.statValue}>{connectionsCount}</span>
           <span style={styles.statLabel}>Connections</span>
         </div>
         <div style={styles.statDivider} />
@@ -218,6 +291,39 @@ function Profile() {
           🎾 My Matches
         </button>
       </div>
+
+      {/* Match Stats */}
+      {matchStats && matchStats.total > 0 && (
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Match Stats</h3>
+          <div style={styles.statsCard}>
+            <div style={styles.statsGrid}>
+              <div style={styles.statBox}>
+                <span style={styles.statBoxVal}>{matchStats.total}</span>
+                <span style={styles.statBoxLabel}>Played</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={{ ...styles.statBoxVal, color: '#10b981' }}>{matchStats.wins}</span>
+                <span style={styles.statBoxLabel}>Wins</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={{ ...styles.statBoxVal, color: '#ef4444' }}>{matchStats.losses}</span>
+                <span style={styles.statBoxLabel}>Losses</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={styles.statBoxVal}>{matchStats.winPct !== null ? `${matchStats.winPct}%` : '—'}</span>
+                <span style={styles.statBoxLabel}>Win Rate</span>
+              </div>
+            </div>
+            {matchStats.favCourt && (
+              <div style={styles.favCourtRow}>
+                <span>📍</span>
+                <span style={styles.favCourtText}>Favourite court: <strong>{matchStats.favCourt}</strong></span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>About</h3>
@@ -258,6 +364,44 @@ function Profile() {
               )}
             </div>
           ))}
+
+          {/* Preferred Surface */}
+          <div style={styles.detailItem}>
+            <span style={styles.detailLabel}>Preferred Surface</span>
+            {editing ? (
+              <select
+                style={styles.detailEditSelect}
+                value={form.preferred_surface || ''}
+                onChange={e => setForm({ ...form, preferred_surface: e.target.value })}
+              >
+                <option value="">Select...</option>
+                {surfaceOptions.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <span style={styles.detailValue}>{profile.preferred_surface || '—'}</span>
+            )}
+          </div>
+
+          {/* Age */}
+          <div style={styles.detailItem}>
+            <span style={styles.detailLabel}>Age</span>
+            {editing ? (
+              <input
+                style={styles.detailEditInput}
+                type="number"
+                value={form.age || ''}
+                onChange={e => setForm({ ...form, age: e.target.value })}
+                placeholder="e.g. 28"
+                min="10"
+                max="99"
+              />
+            ) : (
+              <span style={styles.detailValue}>{profile.age || '—'}</span>
+            )}
+          </div>
+
           {profile.dominant_hand && (
             <div style={styles.detailItem}>
               <span style={styles.detailLabel}>Dominant Hand</span>
@@ -270,6 +414,116 @@ function Profile() {
               {new Date(profile.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* ── Extras Section ─────────────────────────────────────────── */}
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Extras</h3>
+
+        {/* Sparring Toggle */}
+        <div style={styles.extraCard}>
+          <div style={styles.extraCardTop}>
+            <div style={styles.extraCardLeft}>
+              <div style={{ ...styles.extraIconBox, backgroundColor: 'rgba(200,255,0,0.1)' }}>
+                <span style={{ fontSize: '20px' }}>⚡</span>
+              </div>
+              <div>
+                <p style={styles.extraTitle}>Open to Sparring</p>
+                <p style={styles.extraDesc}>Let others book you as a sparring partner</p>
+              </div>
+            </div>
+            <div
+              style={{ ...styles.toggle, backgroundColor: profile.open_to_sparring ? '#c8ff00' : '#e0e4ea' }}
+              onClick={handleToggleSparring}
+            >
+              <div style={{ ...styles.toggleKnob, transform: profile.open_to_sparring ? 'translateX(20px)' : 'translateX(2px)' }} />
+            </div>
+          </div>
+
+          {profile.open_to_sparring && (
+            <div style={styles.extraFields}>
+              <div style={styles.extraFieldRow}>
+                <span style={styles.extraFieldLabel}>Hourly Rate (€)</span>
+                {editing ? (
+                  <input
+                    style={styles.extraFieldInput}
+                    type="number"
+                    value={form.sparring_rate || ''}
+                    onChange={e => setForm({ ...form, sparring_rate: e.target.value })}
+                    placeholder="e.g. 15"
+                    min="0"
+                  />
+                ) : (
+                  <span style={styles.extraFieldValue}>
+                    {profile.sparring_rate ? `€${profile.sparring_rate}/hr` : 'Not set — tap Edit'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Coaching Toggle */}
+        <div style={{ ...styles.extraCard, marginTop: '10px' }}>
+          <div style={styles.extraCardTop}>
+            <div style={styles.extraCardLeft}>
+              <div style={{ ...styles.extraIconBox, backgroundColor: 'rgba(168,85,247,0.1)' }}>
+                <span style={{ fontSize: '20px' }}>📋</span>
+              </div>
+              <div>
+                <p style={styles.extraTitle}>I Also Coach</p>
+                <p style={styles.extraDesc}>Show up as a coach on your profile</p>
+              </div>
+            </div>
+            <div
+              style={{ ...styles.toggle, backgroundColor: profile.also_coaches ? '#a855f7' : '#e0e4ea' }}
+              onClick={handleToggleCoaching}
+            >
+              <div style={{ ...styles.toggleKnob, transform: profile.also_coaches ? 'translateX(20px)' : 'translateX(2px)' }} />
+            </div>
+          </div>
+
+          {profile.also_coaches && (
+            <div style={styles.extraFields}>
+              <div style={styles.extraFieldRow}>
+                <span style={styles.extraFieldLabel}>Hourly Rate (€)</span>
+                {editing ? (
+                  <input
+                    style={styles.extraFieldInput}
+                    type="number"
+                    value={form.coaching_rate || ''}
+                    onChange={e => setForm({ ...form, coaching_rate: e.target.value })}
+                    placeholder="e.g. 40"
+                    min="0"
+                  />
+                ) : (
+                  <span style={styles.extraFieldValue}>
+                    {profile.coaching_rate ? `€${profile.coaching_rate}/hr` : 'Not set — tap Edit'}
+                  </span>
+                )}
+              </div>
+              <div style={styles.extraFieldRow}>
+                <span style={styles.extraFieldLabel}>Specialisation</span>
+                {editing ? (
+                  <select
+                    style={styles.extraFieldSelect}
+                    value={form.coaching_specialisation || ''}
+                    onChange={e => setForm({ ...form, coaching_specialisation: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {specialisationOptions.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span style={styles.extraFieldValue}>
+                    {profile.coaching_specialisation || 'Not set — tap Edit'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -412,6 +666,16 @@ const styles = {
     fontWeight: '500',
     letterSpacing: '0.5px',
   },
+  extraBadge: {
+    fontSize: '11px',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    fontWeight: '500',
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(200,255,0,0.15)',
+    color: '#c8ff00',
+    border: '1px solid rgba(200,255,0,0.3)',
+  },
   utrBadge: {
     fontSize: '12px',
     fontWeight: '700',
@@ -488,6 +752,52 @@ const styles = {
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
     letterSpacing: '0.2px',
   },
+  statsCard: {
+    backgroundColor: 'white',
+    borderRadius: '14px',
+    padding: '16px',
+    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr 1fr',
+    gap: '8px',
+  },
+  statBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '3px',
+  },
+  statBoxVal: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#0a1628',
+    letterSpacing: '-0.3px',
+  },
+  statBoxLabel: {
+    fontSize: '9px',
+    color: '#9aa0ac',
+    textTransform: 'uppercase',
+    letterSpacing: '0.8px',
+    fontWeight: '500',
+  },
+  favCourtRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    paddingTop: '8px',
+    borderTop: '1px solid #f0f2f5',
+    fontSize: '13px',
+  },
+  favCourtText: {
+    fontSize: '12px',
+    color: '#5a6270',
+    fontWeight: '400',
+  },
   sectionTitle: {
     fontSize: '11px',
     fontWeight: '600',
@@ -555,6 +865,121 @@ const styles = {
     outline: 'none',
     backgroundColor: 'transparent',
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  },
+  detailEditSelect: {
+    border: 'none',
+    borderBottom: '1.5px solid #e0e4ea',
+    padding: '4px 0',
+    fontSize: '13px',
+    color: '#0a1628',
+    outline: 'none',
+    backgroundColor: 'transparent',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    width: '100%',
+  },
+  extraCard: {
+    backgroundColor: 'white',
+    borderRadius: '14px',
+    padding: '16px',
+    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+  },
+  extraCardTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  extraCardLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
+  },
+  extraIconBox: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  extraTitle: {
+    margin: '0 0 2px 0',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#0a1628',
+  },
+  extraDesc: {
+    margin: '0',
+    fontSize: '11px',
+    color: '#9aa0ac',
+    fontWeight: '400',
+  },
+  toggle: {
+    width: '44px',
+    height: '26px',
+    borderRadius: '999px',
+    cursor: 'pointer',
+    position: 'relative',
+    transition: 'background-color 0.2s',
+    flexShrink: 0,
+  },
+  toggleKnob: {
+    position: 'absolute',
+    top: '3px',
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    backgroundColor: 'white',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+    transition: 'transform 0.2s',
+  },
+  extraFields: {
+    marginTop: '14px',
+    paddingTop: '14px',
+    borderTop: '1px solid #f0f2f5',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  extraFieldRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  extraFieldLabel: {
+    fontSize: '12px',
+    color: '#5a6270',
+    fontWeight: '500',
+  },
+  extraFieldValue: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#0a1628',
+  },
+  extraFieldInput: {
+    border: 'none',
+    borderBottom: '1.5px solid #e0e4ea',
+    padding: '4px 8px',
+    fontSize: '13px',
+    color: '#0a1628',
+    outline: 'none',
+    backgroundColor: 'transparent',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    width: '80px',
+    textAlign: 'right',
+  },
+  extraFieldSelect: {
+    border: 'none',
+    borderBottom: '1.5px solid #e0e4ea',
+    padding: '4px 0',
+    fontSize: '13px',
+    color: '#0a1628',
+    outline: 'none',
+    backgroundColor: 'transparent',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    width: '140px',
+    textAlign: 'right',
   },
   cancelBtn: {
     width: '100%',

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 const theme = {
   bg: '#f4f6f8',
@@ -110,6 +110,33 @@ const styles = {
     cursor: 'pointer',
     textAlign: 'center',
     transition: 'all 0.2s',
+  }),
+  surfaceGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+  },
+  surfaceCard: (selected) => ({
+    padding: '24px 16px',
+    borderRadius: '16px',
+    border: `1.5px solid ${selected ? theme.accent : 'rgba(255,255,255,0.12)'}`,
+    backgroundColor: selected ? 'rgba(200,255,0,0.1)' : 'rgba(255,255,255,0.05)',
+    color: selected ? theme.accent : 'rgba(255,255,255,0.6)',
+    fontFamily: theme.font,
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  }),
+  surfaceEmoji: {
+    fontSize: '32px',
+  },
+  surfaceLabel: (selected) => ({
+    fontSize: '15px',
+    fontWeight: selected ? '600' : '400',
   }),
   ageRow: {
     display: 'flex',
@@ -283,6 +310,13 @@ const utrTiers = [
   { label: 'Pro', range: '13–16' },
 ];
 
+const surfaces = [
+  { value: 'Hard', emoji: '🔵', label: 'Hard' },
+  { value: 'Clay', emoji: '🟠', label: 'Clay' },
+  { value: 'Grass', emoji: '🟢', label: 'Grass' },
+  { value: 'Indoor', emoji: '🏢', label: 'Indoor' },
+];
+
 function getUtrTier(val) {
   if (val <= 4) return 0;
   if (val <= 8) return 1;
@@ -306,6 +340,7 @@ export default function Onboarding() {
   const [longitude, setLongitude] = useState(null);
   const [locLoading, setLocLoading] = useState(false);
   const [dominantHand, setDominantHand] = useState('');
+  const [preferredSurface, setPreferredSurface] = useState('');
   const [utr, setUtr] = useState(5);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -316,8 +351,9 @@ export default function Onboarding() {
       case 2: return age >= 10 && age <= 80 && gender !== '';
       case 3: return true;
       case 4: return dominantHand !== '';
-      case 5: return true;
+      case 5: return true; // preferred surface is skippable
       case 6: return true;
+      case 7: return true;
       default: return false;
     }
   };
@@ -383,7 +419,6 @@ export default function Onboarding() {
         }
       }
 
-      // Use update (not upsert) — row already exists from Signup
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -394,6 +429,7 @@ export default function Onboarding() {
           longitude,
           location: locationLabel || null,
           dominant_hand: dominantHand || null,
+          preferred_surface: preferredSurface || null,
           utr_rating: utr,
           ...(avatar_url && { avatar_url }),
           onboarding_complete: true,
@@ -402,7 +438,6 @@ export default function Onboarding() {
 
       if (error) console.error('Onboarding save error:', error);
 
-      // Always navigate — never block the user
       navigate('/discovery');
     } catch (err) {
       console.error('Onboarding error:', err);
@@ -504,11 +539,32 @@ export default function Onboarding() {
           </>
         );
 
-      case 5: {
-        const tierIndex = getUtrTier(utr);
+      case 5:
         return (
           <>
             <div style={styles.stepLabel}>Step 5 of {TOTAL_STEPS}</div>
+            <div style={styles.heading}>Preferred surface?</div>
+            <div style={styles.subheading}>Where do you love to play most?</div>
+            <div style={styles.surfaceGrid}>
+              {surfaces.map((s) => (
+                <div
+                  key={s.value}
+                  style={styles.surfaceCard(preferredSurface === s.value)}
+                  onClick={() => setPreferredSurface(preferredSurface === s.value ? '' : s.value)}
+                >
+                  <span style={styles.surfaceEmoji}>{s.emoji}</span>
+                  <span style={styles.surfaceLabel(preferredSurface === s.value)}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+
+      case 6: {
+        const tierIndex = getUtrTier(utr);
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 6 of {TOTAL_STEPS}</div>
             <div style={styles.heading}>Your UTR rating</div>
             <div style={styles.subheading}>Universal Tennis Rating — drag to set your level.</div>
             <div style={styles.utrValue}>{utr}</div>
@@ -547,10 +603,10 @@ export default function Onboarding() {
         );
       }
 
-      case 6:
+      case 7:
         return (
           <>
-            <div style={styles.stepLabel}>Step 6 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 7 of {TOTAL_STEPS}</div>
             <div style={styles.heading}>Add a photo</div>
             <div style={styles.subheading}>Players with photos get 3× more connection requests.</div>
             <div style={styles.photoArea}>

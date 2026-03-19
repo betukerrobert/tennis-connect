@@ -22,7 +22,6 @@ function Layout({ children }) {
   }, []);
 
   // ── Fetch notification state ──────────────────────────────────────────
-  // Accepts currentPath so it doesn't depend on location closure — no stale reads
   const fetchNotifications = useCallback(async (currentPath) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -45,8 +44,6 @@ function Layout({ children }) {
 
     const onMessagesPage = currentPath === '/messages' || currentPath?.startsWith('/chat/');
 
-    console.log('[NOTIF DEBUG] path:', currentPath, '| unread count:', unreadMessages?.length, '| onMessagesPage:', onMessagesPage, '| setting messages dot:', onMessagesPage ? false : unreadMessages?.length > 0);
-
     setNotifications({
       matches: (pendingMatches?.length > 0) || (rescheduledMatches?.length > 0),
       discovery: pendingConnections?.length > 0,
@@ -54,23 +51,22 @@ function Layout({ children }) {
     });
   }, []);
 
-  // ── Silently update user's location in the background ────────────────
+  // ── Load user data + listen for auth changes ──────────────────────────
   useEffect(() => {
-    const updateLocation = async () => {
-      if (!navigator.geolocation) return;
+    const loadUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      
+
       await requestNotificationPermission(user.id);
 
-      // Fetch profile for sidebar display
       const { data: prof } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
         .eq('id', user.id)
         .single();
       if (prof) setSidebarProfile(prof);
-      
+
+      if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           await supabase
@@ -85,7 +81,13 @@ function Layout({ children }) {
         { timeout: 10000 }
       );
     };
-    updateLocation();
+
+    loadUserData();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      setSidebarProfile(null);
+      loadUserData();
+    });
 
     onMessageListener()
       .then((payload) => {
@@ -99,6 +101,8 @@ function Layout({ children }) {
         fetchNotifications(window.location.pathname);
       })
       .catch((err) => console.log('Failed to receive foreground message:', err));
+
+    return () => subscription.unsubscribe();
   }, [fetchNotifications]);
 
   // ── Redirect to onboarding if profile is incomplete ──────────────────
@@ -127,7 +131,6 @@ function Layout({ children }) {
   // Instantly clear messages dot when Chat marks messages as read
   useEffect(() => {
     const handler = () => {
-      console.log('[NOTIF DEBUG] messages-read event received — clearing dot');
       setNotifications(prev => ({ ...prev, messages: false }));
     };
     window.addEventListener('messages-read', handler);

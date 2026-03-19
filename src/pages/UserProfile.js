@@ -13,6 +13,8 @@ function UserProfile() {
   const [connection, setConnection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [connectionsCount, setConnectionsCount] = useState(0);
+  const [matchStats, setMatchStats] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -34,6 +36,35 @@ function UserProfile() {
         );
         setConnection(relevant || null);
       }
+
+      // Fetch this player's connections count
+      const { count } = await supabase
+        .from('connections')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'accepted')
+        .or(`sender_id.eq.${id},receiver_id.eq.${id}`);
+      setConnectionsCount(count || 0);
+
+      // Fetch this player's match stats
+      const { data: matches } = await supabase
+        .from('matches')
+        .select('id, match_date, result, court_name, status, sender_id, receiver_id')
+        .or(`sender_id.eq.${id},receiver_id.eq.${id}`)
+        .order('match_date', { ascending: false });
+
+      if (matches) {
+        const today = new Date().toISOString().split('T')[0];
+        const past = matches.filter(m => m.match_date < today && m.status === 'accepted');
+        const withResult = past.filter(m => m.result);
+        const wins = withResult.filter(m => m.result === 'win').length;
+        const losses = withResult.filter(m => m.result === 'loss').length;
+        const winPct = withResult.length > 0 ? Math.round((wins / withResult.length) * 100) : null;
+        const courts = past.filter(m => m.court_name).map(m => m.court_name);
+        const courtCounts = courts.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {});
+        const favCourt = Object.keys(courtCounts).sort((a, b) => courtCounts[b] - courtCounts[a])[0] || null;
+        if (past.length > 0) setMatchStats({ total: past.length, wins, losses, winPct, favCourt });
+      }
+
       setLoading(false);
     };
     load();
@@ -75,8 +106,7 @@ function UserProfile() {
     if (!error && data) setConnection(data);
   };
 
-  const handleMessage = async () => {
-    // Find or create a chat — navigate to chat with this user's id
+  const handleMessage = () => {
     navigate(`/chat/${id}`);
   };
 
@@ -139,8 +169,13 @@ function UserProfile() {
         )}
       </div>
 
-      {/* Stats */}
+      {/* Stats Row */}
       <div style={styles.statsRow}>
+        <div style={styles.statItem}>
+          <span style={styles.statValue}>{connectionsCount}</span>
+          <span style={styles.statLabel}>Connections</span>
+        </div>
+        <div style={styles.statDivider} />
         <div style={styles.statItem}>
           {profile.total_ratings > 0 ? (
             <>
@@ -159,13 +194,8 @@ function UserProfile() {
         </div>
         <div style={styles.statDivider} />
         <div style={styles.statItem}>
-          <span style={styles.statValue}>{profile.level || '—'}</span>
-          <span style={styles.statLabel}>Level</span>
-        </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem}>
-          <span style={styles.statValue}>{profile.play_style || '—'}</span>
-          <span style={styles.statLabel}>Style</span>
+          <span style={styles.statValue}>{matchStats ? matchStats.total : '—'}</span>
+          <span style={styles.statLabel}>Matches</span>
         </div>
       </div>
 
@@ -199,6 +229,39 @@ function UserProfile() {
         </div>
       )}
 
+      {/* Match Stats */}
+      {matchStats && (
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Match Stats</h3>
+          <div style={styles.statsCard}>
+            <div style={styles.statsGrid}>
+              <div style={styles.statBox}>
+                <span style={styles.statBoxVal}>{matchStats.total}</span>
+                <span style={styles.statBoxLabel}>Played</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={{ ...styles.statBoxVal, color: '#10b981' }}>{matchStats.wins}</span>
+                <span style={styles.statBoxLabel}>Wins</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={{ ...styles.statBoxVal, color: '#ef4444' }}>{matchStats.losses}</span>
+                <span style={styles.statBoxLabel}>Losses</span>
+              </div>
+              <div style={styles.statBox}>
+                <span style={styles.statBoxVal}>{matchStats.winPct !== null ? `${matchStats.winPct}%` : '—'}</span>
+                <span style={styles.statBoxLabel}>Win Rate</span>
+              </div>
+            </div>
+            {matchStats.favCourt && (
+              <div style={styles.favCourtRow}>
+                <span>📍</span>
+                <span style={styles.favCourtText}>Favourite court: <strong>{matchStats.favCourt}</strong></span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Details */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Details</h3>
@@ -208,6 +271,8 @@ function UserProfile() {
             { label: 'Availability', value: profile.availability },
             { label: 'Play Style', value: profile.play_style },
             { label: 'Dominant Hand', value: profile.dominant_hand },
+            { label: 'Preferred Surface', value: profile.preferred_surface },
+            { label: 'Age', value: profile.age },
           ].filter(d => d.value).map(d => (
             <div key={d.label} style={styles.detailItem}>
               <span style={styles.detailLabel}>{d.label}</span>
@@ -432,6 +497,52 @@ const styles = {
     borderRadius: '12px',
     margin: '0',
     boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+    fontWeight: '400',
+  },
+  statsCard: {
+    backgroundColor: 'white',
+    borderRadius: '14px',
+    padding: '16px',
+    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr 1fr',
+    gap: '8px',
+  },
+  statBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '3px',
+  },
+  statBoxVal: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#0a1628',
+    letterSpacing: '-0.3px',
+  },
+  statBoxLabel: {
+    fontSize: '9px',
+    color: '#9aa0ac',
+    textTransform: 'uppercase',
+    letterSpacing: '0.8px',
+    fontWeight: '500',
+  },
+  favCourtRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    paddingTop: '8px',
+    borderTop: '1px solid #f0f2f5',
+    fontSize: '13px',
+  },
+  favCourtText: {
+    fontSize: '12px',
+    color: '#5a6270',
     fontWeight: '400',
   },
   detailsGrid: {
