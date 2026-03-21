@@ -131,6 +131,7 @@ function UserProfile() {
     ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '?';
   const status = getConnectionStatus();
+  const isConnected = status === 'accepted';
 
   return (
     <div style={styles.container}>
@@ -159,6 +160,18 @@ function UserProfile() {
         <span style={{ ...styles.roleBadge, backgroundColor: accentColor + '25', color: accentColor, border: `1px solid ${accentColor}40` }}>
           {roleLabels[profile.role] || 'Member'}
         </span>
+
+        {/* Extra badges */}
+        {(profile.open_to_sparring || profile.also_coaches) && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {profile.open_to_sparring && (
+              <span style={styles.extraBadge}>⚡ Sparring</span>
+            )}
+            {profile.also_coaches && (
+              <span style={{ ...styles.extraBadge, backgroundColor: 'rgba(168,85,247,0.15)', color: '#a855f7', borderColor: 'rgba(168,85,247,0.3)' }}>📋 Coach</span>
+            )}
+          </div>
+        )}
 
         {profile.location && (
           <p style={styles.location}>📍 {profile.location}</p>
@@ -220,6 +233,22 @@ function UserProfile() {
           </button>
         )}
       </div>
+
+      {/* Booking Buttons — only shown when connected and extras are active */}
+      {isConnected && (profile.open_to_sparring || profile.also_coaches) && (
+        <div style={styles.bookingRow}>
+          {profile.open_to_sparring && (
+            <button style={styles.bookSparringBtn} onClick={() => navigate(`/chat/${id}`)}>
+              ⚡ Book Sparring{profile.sparring_rate ? ` · €${profile.sparring_rate}/hr` : ''}
+            </button>
+          )}
+          {profile.also_coaches && (
+            <button style={styles.bookCoachingBtn} onClick={() => navigate(`/chat/${id}`)}>
+              📋 Book Coaching{profile.coaching_rate ? ` · €${profile.coaching_rate}/hr` : ''}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* About */}
       {profile.bio && (
@@ -287,6 +316,56 @@ function UserProfile() {
           </div>
         </div>
       </div>
+
+      {/* Extras Section — read-only, only shown if active */}
+      {(profile.open_to_sparring || profile.also_coaches) && (
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Extras</h3>
+
+          {profile.open_to_sparring && (
+            <div style={styles.extraCard}>
+              <div style={styles.extraCardTop}>
+                <div style={styles.extraCardLeft}>
+                  <div style={{ ...styles.extraIconBox, backgroundColor: 'rgba(200,255,0,0.1)' }}>
+                    <span style={{ fontSize: '20px' }}>⚡</span>
+                  </div>
+                  <div>
+                    <p style={styles.extraTitle}>Open to Sparring</p>
+                    {profile.sparring_rate ? (
+                      <p style={styles.extraDesc}>€{profile.sparring_rate}/hr</p>
+                    ) : (
+                      <p style={styles.extraDesc}>Rate not specified</p>
+                    )}
+                  </div>
+                </div>
+                <span style={styles.extraActiveBadge}>Active</span>
+              </div>
+            </div>
+          )}
+
+          {profile.also_coaches && (
+            <div style={{ ...styles.extraCard, marginTop: profile.open_to_sparring ? '10px' : '0' }}>
+              <div style={styles.extraCardTop}>
+                <div style={styles.extraCardLeft}>
+                  <div style={{ ...styles.extraIconBox, backgroundColor: 'rgba(168,85,247,0.1)' }}>
+                    <span style={{ fontSize: '20px' }}>📋</span>
+                  </div>
+                  <div>
+                    <p style={styles.extraTitle}>Also Coaches</p>
+                    <p style={styles.extraDesc}>
+                      {[
+                        profile.coaching_specialisation,
+                        profile.coaching_rate ? `€${profile.coaching_rate}/hr` : null,
+                      ].filter(Boolean).join(' · ') || 'Details not specified'}
+                    </p>
+                  </div>
+                </div>
+                <span style={{ ...styles.extraActiveBadge, backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>Active</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );
@@ -374,6 +453,16 @@ const styles = {
     fontWeight: '500',
     letterSpacing: '0.5px',
   },
+  extraBadge: {
+    fontSize: '11px',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    fontWeight: '500',
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(200,255,0,0.15)',
+    color: '#c8ff00',
+    border: '1px solid rgba(200,255,0,0.3)',
+  },
   utrBadge: {
     fontSize: '12px',
     fontWeight: '700',
@@ -428,6 +517,38 @@ const styles = {
     gap: '10px',
     padding: '16px 16px 0 16px',
     flexWrap: 'wrap',
+  },
+  bookingRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '10px 16px 0 16px',
+  },
+  bookSparringBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(200,255,0,0.1)',
+    color: '#5a7a00',
+    border: '1.5px solid rgba(200,255,0,0.4)',
+    borderRadius: '12px',
+    padding: '13px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    textAlign: 'center',
+  },
+  bookCoachingBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(168,85,247,0.08)',
+    color: '#7c3aed',
+    border: '1.5px solid rgba(168,85,247,0.25)',
+    borderRadius: '12px',
+    padding: '13px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    textAlign: 'center',
   },
   accentBtn: {
     flex: 1,
@@ -571,6 +692,54 @@ const styles = {
     fontWeight: '600',
     color: '#0a1628',
     letterSpacing: '-0.2px',
+  },
+  extraCard: {
+    backgroundColor: 'white',
+    borderRadius: '14px',
+    padding: '16px',
+    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
+  },
+  extraCardTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  extraCardLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
+  },
+  extraIconBox: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  extraTitle: {
+    margin: '0 0 2px 0',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#0a1628',
+  },
+  extraDesc: {
+    margin: '0',
+    fontSize: '11px',
+    color: '#9aa0ac',
+    fontWeight: '400',
+  },
+  extraActiveBadge: {
+    fontSize: '10px',
+    padding: '3px 10px',
+    borderRadius: '999px',
+    fontWeight: '600',
+    backgroundColor: 'rgba(200,255,0,0.12)',
+    color: '#5a7a00',
+    letterSpacing: '0.3px',
+    flexShrink: 0,
   },
 };
 

@@ -280,6 +280,12 @@ function Discovery() {
                             {roleLabels[user.role]}
                           </span>
                         )}
+                        {user.open_to_sparring && (
+                          <span style={styles.sparringBadge}>⚡ Sparring</span>
+                        )}
+                        {user.also_coaches && (
+                          <span style={styles.coachingBadge}>📋 Coach</span>
+                        )}
                       </div>
                       <div style={styles.cardMeta}>
                         {user.distanceKm !== null
@@ -376,9 +382,19 @@ const styles = {
   avatar: { width: '46px', height: '46px', borderRadius: '12px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: '600', flexShrink: 0 },
   avatarPhoto: { width: '46px', height: '46px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 },
   cardInfo: { flex: 1 },
-  cardNameRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' },
+  cardNameRow: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' },
   cardName: { margin: '0', fontSize: '14px', fontWeight: '600', color: '#0a1628', letterSpacing: '-0.2px' },
   roleBadge: { fontSize: '10px', padding: '2px 8px', borderRadius: '999px', fontWeight: '500' },
+  sparringBadge: {
+    fontSize: '10px', padding: '2px 7px', borderRadius: '999px', fontWeight: '500',
+    backgroundColor: 'rgba(200,255,0,0.12)', color: '#5a7a00',
+    border: '1px solid rgba(200,255,0,0.35)',
+  },
+  coachingBadge: {
+    fontSize: '10px', padding: '2px 7px', borderRadius: '999px', fontWeight: '500',
+    backgroundColor: 'rgba(168,85,247,0.1)', color: '#7c3aed',
+    border: '1px solid rgba(168,85,247,0.25)',
+  },
   cardMeta: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
   metaItem: { fontSize: '11px', color: '#9aa0ac' },
   metaDot: { color: '#e0e4ea' },

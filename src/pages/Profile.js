@@ -455,8 +455,11 @@ function Profile() {
                     min="0"
                   />
                 ) : (
-                  <span style={styles.extraFieldValue}>
-                    {profile.sparring_rate ? `€${profile.sparring_rate}/hr` : 'Not set — tap Edit'}
+                  <span
+                    style={profile.sparring_rate ? styles.extraFieldValue : styles.extraFieldNotSet}
+                    onClick={() => { if (!profile.sparring_rate) setEditing(true); }}
+                  >
+                    {profile.sparring_rate ? `€${profile.sparring_rate}/hr` : 'Tap to set rate ✏️'}
                   </span>
                 )}
               </div>
@@ -498,8 +501,11 @@ function Profile() {
                     min="0"
                   />
                 ) : (
-                  <span style={styles.extraFieldValue}>
-                    {profile.coaching_rate ? `€${profile.coaching_rate}/hr` : 'Not set — tap Edit'}
+                  <span
+                    style={profile.coaching_rate ? styles.extraFieldValue : styles.extraFieldNotSet}
+                    onClick={() => { if (!profile.coaching_rate) setEditing(true); }}
+                  >
+                    {profile.coaching_rate ? `€${profile.coaching_rate}/hr` : 'Tap to set rate ✏️'}
                   </span>
                 )}
               </div>
@@ -517,8 +523,11 @@ function Profile() {
                     ))}
                   </select>
                 ) : (
-                  <span style={styles.extraFieldValue}>
-                    {profile.coaching_specialisation || 'Not set — tap Edit'}
+                  <span
+                    style={profile.coaching_specialisation ? styles.extraFieldValue : styles.extraFieldNotSet}
+                    onClick={() => { if (!profile.coaching_specialisation) setEditing(true); }}
+                  >
+                    {profile.coaching_specialisation || 'Tap to set ✏️'}
                   </span>
                 )}
               </div>
@@ -956,6 +965,14 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     color: '#0a1628',
+  },
+  extraFieldNotSet: {
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#9aa0ac',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    textDecorationStyle: 'dotted',
   },
   extraFieldInput: {
     border: 'none',
