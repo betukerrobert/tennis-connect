@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
-const TOTAL_STEPS = 7;
+const PLAYER_STEPS = 7;
+const COACH_STEPS = 7;
 
 const theme = {
   bg: '#f4f6f8',
@@ -301,6 +302,22 @@ const styles = {
     padding: '8px',
     textAlign: 'center',
   },
+  textarea: {
+    width: '100%',
+    padding: '18px 20px',
+    fontSize: '15px',
+    fontFamily: theme.font,
+    fontWeight: '400',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    border: '1.5px solid rgba(255,255,255,0.12)',
+    borderRadius: '14px',
+    color: '#ffffff',
+    outline: 'none',
+    boxSizing: 'border-box',
+    resize: 'none',
+    lineHeight: '1.6',
+    transition: 'border-color 0.2s, background-color 0.2s',
+  },
 };
 
 const utrTiers = [
@@ -317,6 +334,13 @@ const surfaces = [
   { value: 'Indoor', emoji: '🏢', label: 'Indoor' },
 ];
 
+const specialisations = [
+  { value: 'Beginner', emoji: '🌱', label: 'Beginner' },
+  { value: 'Intermediate', emoji: '🎯', label: 'Intermediate' },
+  { value: 'Advanced', emoji: '🏆', label: 'Advanced' },
+  { value: 'Kids', emoji: '👦', label: 'Kids' },
+];
+
 function getUtrTier(val) {
   if (val <= 4) return 0;
   if (val <= 8) return 1;
@@ -328,10 +352,12 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
+  const [role, setRole] = useState(null);
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
 
+  // Shared fields
   const [name, setName] = useState('');
   const [age, setAge] = useState(25);
   const [gender, setGender] = useState('');
@@ -339,22 +365,60 @@ export default function Onboarding() {
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [locLoading, setLocLoading] = useState(false);
-  const [dominantHand, setDominantHand] = useState('');
-  const [preferredSurface, setPreferredSurface] = useState('');
-  const [utr, setUtr] = useState(5);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
+  // Player-only fields
+  const [dominantHand, setDominantHand] = useState('');
+  const [preferredSurface, setPreferredSurface] = useState('');
+  const [utr, setUtr] = useState(5);
+
+  // Coach-only fields
+  const [coachSpecialisation, setCoachSpecialisation] = useState('');
+  const [coachingRate, setCoachingRate] = useState('');
+  const [coachingExperience, setCoachingExperience] = useState('');
+  const [bio, setBio] = useState('');
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (data) setRole(data.role);
+    };
+    fetchRole();
+  }, []);
+
+  const totalSteps = role === 'coach' ? COACH_STEPS : PLAYER_STEPS;
+
   const canProceed = () => {
-    switch (step) {
-      case 1: return name.trim().length >= 2;
-      case 2: return age >= 10 && age <= 80 && gender !== '';
-      case 3: return true;
-      case 4: return dominantHand !== '';
-      case 5: return true; // preferred surface is skippable
-      case 6: return true;
-      case 7: return true;
-      default: return false;
+    if (role === 'coach') {
+      switch (step) {
+        case 1: return name.trim().length >= 2;
+        case 2: return age >= 10 && age <= 80 && gender !== '';
+        case 3: return true;
+        case 4: return coachSpecialisation !== '';
+        case 5: return true;
+        case 6: return true;
+        case 7: return true;
+        default: return false;
+      }
+    } else {
+      switch (step) {
+        case 1: return name.trim().length >= 2;
+        case 2: return age >= 10 && age <= 80 && gender !== '';
+        case 3: return true;
+        case 4: return dominantHand !== '';
+        case 5: return true;
+        case 6: return true;
+        case 7: return true;
+        default: return false;
+      }
     }
   };
 
@@ -404,7 +468,6 @@ export default function Onboarding() {
       if (!user) throw new Error('Not authenticated');
 
       let avatar_url = null;
-
       if (photoFile) {
         const ext = photoFile.name.split('.').pop();
         const path = `${user.id}/avatar.${ext}`;
@@ -419,24 +482,45 @@ export default function Onboarding() {
         }
       }
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: name.trim() || null,
-          age,
-          gender: gender || null,
-          latitude,
-          longitude,
-          location: locationLabel || null,
-          dominant_hand: dominantHand || null,
-          preferred_surface: preferredSurface || null,
-          utr_rating: utr,
-          ...(avatar_url && { avatar_url }),
-          onboarding_complete: true,
-        })
-        .eq('id', user.id);
-
-      if (error) console.error('Onboarding save error:', error);
+      if (role === 'coach') {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: name.trim() || null,
+            age,
+            gender: gender || null,
+            latitude,
+            longitude,
+            location: locationLabel || null,
+            coaching_specialisation: coachSpecialisation || null,
+            coaching_rate: coachingRate ? parseFloat(coachingRate) : null,
+            coaching_experience: coachingExperience ? parseInt(coachingExperience) : null,
+            also_coaches: true,
+            bio: bio || null,
+            ...(avatar_url && { avatar_url }),
+            onboarding_complete: true,
+          })
+          .eq('id', user.id);
+        if (error) console.error('Coach onboarding save error:', error);
+      } else {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: name.trim() || null,
+            age,
+            gender: gender || null,
+            latitude,
+            longitude,
+            location: locationLabel || null,
+            dominant_hand: dominantHand || null,
+            preferred_surface: preferredSurface || null,
+            utr_rating: utr,
+            ...(avatar_url && { avatar_url }),
+            onboarding_complete: true,
+          })
+          .eq('id', user.id);
+        if (error) console.error('Player onboarding save error:', error);
+      }
 
       navigate('/discovery');
     } catch (err) {
@@ -448,65 +532,58 @@ export default function Onboarding() {
   };
 
   const handleNext = () => {
-    if (step < TOTAL_STEPS) {
-      setStep((s) => s + 1);
-    } else {
-      handleFinish();
-    }
+    if (step < totalSteps) setStep(s => s + 1);
+    else handleFinish();
   };
 
   const handleSkip = () => {
-    if (step < TOTAL_STEPS) {
-      setStep((s) => s + 1);
-    } else {
-      handleFinish();
-    }
+    if (step < totalSteps) setStep(s => s + 1);
+    else handleFinish();
   };
 
-  const renderStep = () => {
+  // ── Player steps ────────────────────────────────────────────────────
+  const renderPlayerStep = () => {
     switch (step) {
       case 1:
         return (
           <>
-            <div style={styles.stepLabel}>Step 1 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 1 of {totalSteps}</div>
             <div style={styles.heading}>What's your name?</div>
             <div style={styles.subheading}>This is how other players will find you.</div>
             <input
               style={{ ...styles.input, ...(focusedInput === 'name' ? styles.inputFocused : {}) }}
               placeholder="First name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               onFocus={() => setFocusedInput('name')}
               onBlur={() => setFocusedInput(null)}
               autoFocus
             />
           </>
         );
-
       case 2:
         return (
           <>
-            <div style={styles.stepLabel}>Step 2 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 2 of {totalSteps}</div>
             <div style={styles.heading}>Age & gender</div>
             <div style={styles.subheading}>Helps us find the right match for you.</div>
             <div style={styles.ageRow}>
-              <button style={styles.ageBtn} onClick={() => setAge((a) => Math.max(10, a - 1))}>−</button>
+              <button style={styles.ageBtn} onClick={() => setAge(a => Math.max(10, a - 1))}>−</button>
               <div style={styles.ageDisplay}>{age}</div>
-              <button style={styles.ageBtn} onClick={() => setAge((a) => Math.min(80, a + 1))}>+</button>
+              <button style={styles.ageBtn} onClick={() => setAge(a => Math.min(80, a + 1))}>+</button>
             </div>
             <div style={{ height: '28px' }} />
             <div style={styles.pillRow}>
-              {['Male', 'Female', 'Other'].map((g) => (
+              {['Male', 'Female', 'Other'].map(g => (
                 <button key={g} style={styles.pill(gender === g)} onClick={() => setGender(g)}>{g}</button>
               ))}
             </div>
           </>
         );
-
       case 3:
         return (
           <>
-            <div style={styles.stepLabel}>Step 3 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 3 of {totalSteps}</div>
             <div style={styles.heading}>Where are you based?</div>
             <div style={styles.subheading}>We'll show you players nearby.</div>
             <button style={styles.locationBtn(!!locationLabel)} onClick={handleGPS} disabled={locLoading}>
@@ -518,15 +595,14 @@ export default function Onboarding() {
             </div>
           </>
         );
-
       case 4:
         return (
           <>
-            <div style={styles.stepLabel}>Step 4 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 4 of {totalSteps}</div>
             <div style={styles.heading}>Dominant hand?</div>
             <div style={styles.subheading}>Left or right — it matters on the court.</div>
             <div style={styles.pillRow}>
-              {['Left', 'Right'].map((h) => (
+              {['Left', 'Right'].map(h => (
                 <button
                   key={h}
                   style={{ ...styles.pill(dominantHand === h), fontSize: '17px', padding: '22px' }}
@@ -538,15 +614,14 @@ export default function Onboarding() {
             </div>
           </>
         );
-
       case 5:
         return (
           <>
-            <div style={styles.stepLabel}>Step 5 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 5 of {totalSteps}</div>
             <div style={styles.heading}>Preferred surface?</div>
             <div style={styles.subheading}>Where do you love to play most?</div>
             <div style={styles.surfaceGrid}>
-              {surfaces.map((s) => (
+              {surfaces.map(s => (
                 <div
                   key={s.value}
                   style={styles.surfaceCard(preferredSurface === s.value)}
@@ -559,12 +634,11 @@ export default function Onboarding() {
             </div>
           </>
         );
-
       case 6: {
         const tierIndex = getUtrTier(utr);
         return (
           <>
-            <div style={styles.stepLabel}>Step 6 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 6 of {totalSteps}</div>
             <div style={styles.heading}>Your UTR rating</div>
             <div style={styles.subheading}>Universal Tennis Rating — drag to set your level.</div>
             <div style={styles.utrValue}>{utr}</div>
@@ -587,7 +661,7 @@ export default function Onboarding() {
               <input
                 type="range" className="utr-slider"
                 min={1} max={16} value={utr}
-                onChange={(e) => setUtr(Number(e.target.value))}
+                onChange={e => setUtr(Number(e.target.value))}
                 style={{ ...styles.slider, background: 'transparent' }}
               />
             </div>
@@ -602,11 +676,10 @@ export default function Onboarding() {
           </>
         );
       }
-
       case 7:
         return (
           <>
-            <div style={styles.stepLabel}>Step 7 of {TOTAL_STEPS}</div>
+            <div style={styles.stepLabel}>Step 7 of {totalSteps}</div>
             <div style={styles.heading}>Add a photo</div>
             <div style={styles.subheading}>Players with photos get 3× more connection requests.</div>
             <div style={styles.photoArea}>
@@ -620,25 +693,10 @@ export default function Onboarding() {
                   </div>
                 )}
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handlePhotoChange}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
               {photoPreview && (
                 <button
-                  style={{
-                    background: 'none',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: '10px',
-                    color: 'rgba(255,255,255,0.5)',
-                    padding: '10px 20px',
-                    fontSize: '13px',
-                    fontFamily: theme.font,
-                    cursor: 'pointer',
-                  }}
+                  style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'rgba(255,255,255,0.5)', padding: '10px 20px', fontSize: '13px', fontFamily: theme.font, cursor: 'pointer' }}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Change photo
@@ -647,33 +705,206 @@ export default function Onboarding() {
             </div>
           </>
         );
-
-      default:
-        return null;
+      default: return null;
     }
   };
+
+  // ── Coach steps ─────────────────────────────────────────────────────
+  const renderCoachStep = () => {
+    switch (step) {
+      case 1:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 1 of {totalSteps}</div>
+            <div style={styles.heading}>What's your name?</div>
+            <div style={styles.subheading}>This is how players will find you.</div>
+            <input
+              style={{ ...styles.input, ...(focusedInput === 'name' ? styles.inputFocused : {}) }}
+              placeholder="Your full name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onFocus={() => setFocusedInput('name')}
+              onBlur={() => setFocusedInput(null)}
+              autoFocus
+            />
+          </>
+        );
+      case 2:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 2 of {totalSteps}</div>
+            <div style={styles.heading}>Age & gender</div>
+            <div style={styles.subheading}>Helps players know who they're working with.</div>
+            <div style={styles.ageRow}>
+              <button style={styles.ageBtn} onClick={() => setAge(a => Math.max(18, a - 1))}>−</button>
+              <div style={styles.ageDisplay}>{age}</div>
+              <button style={styles.ageBtn} onClick={() => setAge(a => Math.min(80, a + 1))}>+</button>
+            </div>
+            <div style={{ height: '28px' }} />
+            <div style={styles.pillRow}>
+              {['Male', 'Female', 'Other'].map(g => (
+                <button key={g} style={styles.pill(gender === g)} onClick={() => setGender(g)}>{g}</button>
+              ))}
+            </div>
+          </>
+        );
+      case 3:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 3 of {totalSteps}</div>
+            <div style={styles.heading}>Where are you based?</div>
+            <div style={styles.subheading}>Players nearby will be able to find you.</div>
+            <button style={styles.locationBtn(!!locationLabel)} onClick={handleGPS} disabled={locLoading}>
+              <span style={{ fontSize: '20px' }}>{locLoading ? '⏳' : locationLabel ? '📍' : '🎯'}</span>
+              <span>{locLoading ? 'Getting location…' : locationLabel ? locationLabel : 'Use my current location'}</span>
+            </button>
+            <div style={styles.locationText}>
+              Your location is only shared as approximate distance — never your exact address.
+            </div>
+          </>
+        );
+      case 4:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 4 of {totalSteps}</div>
+            <div style={styles.heading}>Who do you coach?</div>
+            <div style={styles.subheading}>Select the level you specialise in.</div>
+            <div style={styles.surfaceGrid}>
+              {specialisations.map(s => (
+                <div
+                  key={s.value}
+                  style={styles.surfaceCard(coachSpecialisation === s.value)}
+                  onClick={() => setCoachSpecialisation(s.value)}
+                >
+                  <span style={styles.surfaceEmoji}>{s.emoji}</span>
+                  <span style={styles.surfaceLabel(coachSpecialisation === s.value)}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      case 5:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 5 of {totalSteps}</div>
+            <div style={styles.heading}>Rate & experience</div>
+            <div style={styles.subheading}>Let players know what to expect.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Hourly Rate (€)</div>
+                <input
+                  style={{ ...styles.input, ...(focusedInput === 'rate' ? styles.inputFocused : {}) }}
+                  type="number"
+                  placeholder="e.g. 40"
+                  value={coachingRate}
+                  onChange={e => setCoachingRate(e.target.value)}
+                  onFocus={() => setFocusedInput('rate')}
+                  onBlur={() => setFocusedInput(null)}
+                  min="0"
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '8px' }}>Years of Experience</div>
+                <input
+                  style={{ ...styles.input, ...(focusedInput === 'exp' ? styles.inputFocused : {}) }}
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={coachingExperience}
+                  onChange={e => setCoachingExperience(e.target.value)}
+                  onFocus={() => setFocusedInput('exp')}
+                  onBlur={() => setFocusedInput(null)}
+                  min="0"
+                />
+              </div>
+            </div>
+          </>
+        );
+      case 6:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 6 of {totalSteps}</div>
+            <div style={styles.heading}>Tell us about yourself</div>
+            <div style={styles.subheading}>A great bio helps players decide to book you.</div>
+            <textarea
+              style={{ ...styles.textarea, ...(focusedInput === 'bio' ? styles.inputFocused : {}), minHeight: '140px' }}
+              placeholder="e.g. Former competitive player with 8 years of coaching experience. I focus on technique, footwork and match strategy..."
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              onFocus={() => setFocusedInput('bio')}
+              onBlur={() => setFocusedInput(null)}
+              rows={5}
+            />
+          </>
+        );
+      case 7:
+        return (
+          <>
+            <div style={styles.stepLabel}>Step 7 of {totalSteps}</div>
+            <div style={styles.heading}>Add a photo</div>
+            <div style={styles.subheading}>Coaches with photos get booked 3× more often.</div>
+            <div style={styles.photoArea}>
+              <div style={styles.avatarCircle(!!photoPreview)} onClick={() => fileInputRef.current?.click()}>
+                {photoPreview ? (
+                  <img src={photoPreview} alt="avatar" style={styles.avatarImg} />
+                ) : (
+                  <div style={styles.photoPlaceholder}>
+                    <span style={{ fontSize: '32px' }}>📷</span>
+                    <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)' }}>Tap to upload</span>
+                  </div>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+              {photoPreview && (
+                <button
+                  style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'rgba(255,255,255,0.5)', padding: '10px 20px', fontSize: '13px', fontFamily: theme.font, cursor: 'pointer' }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Change photo
+                </button>
+              )}
+            </div>
+          </>
+        );
+      default: return null;
+    }
+  };
+
+  // Show loading state while role is being fetched
+  if (role === null) {
+    return (
+      <div style={{ ...styles.wrapper, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={styles.bgPattern} />
+        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.15)', borderTop: `3px solid ${theme.accent}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
+
+  const isLastStep = step === totalSteps;
+  const btnLabel = saving ? 'Saving…' : isLastStep ? (role === 'coach' ? 'Start Coaching 📋' : 'Start Playing 🎾') : 'Continue';
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.bgPattern} />
       <div style={styles.progressBar}>
         <div style={styles.progressTrack}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+          {Array.from({ length: totalSteps }).map((_, i) => (
             <div key={i} style={styles.progressDot(i + 1 === step, i + 1 < step)} />
           ))}
         </div>
       </div>
-      <div style={styles.content}>{renderStep()}</div>
+      <div style={styles.content}>
+        {role === 'coach' ? renderCoachStep() : renderPlayerStep()}
+      </div>
       <div style={styles.footer}>
         <button
           style={styles.primaryBtn(!canProceed() || saving)}
           onClick={handleNext}
           disabled={saving}
         >
-          {saving ? 'Saving…' : step === TOTAL_STEPS ? 'Start Playing 🎾' : 'Continue'}
+          {btnLabel}
         </button>
         <button style={styles.skipBtn} onClick={handleSkip}>
-          {step === TOTAL_STEPS ? 'Skip for now' : 'Skip this step'}
+          {isLastStep ? 'Skip for now' : 'Skip this step'}
         </button>
       </div>
     </div>
