@@ -24,8 +24,7 @@ function UserProfile() {
 
       const [{ data: prof }, { data: conn }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', id).single(),
-        supabase.from('connections').select('*')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        supabase.from('connections').select('*').or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
       ]);
 
       if (prof) setProfile(prof);
@@ -37,20 +36,10 @@ function UserProfile() {
         setConnection(relevant || null);
       }
 
-      // Fetch this player's connections count
-      const { count } = await supabase
-        .from('connections')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'accepted')
-        .or(`sender_id.eq.${id},receiver_id.eq.${id}`);
+      const { count } = await supabase.from('connections').select('*', { count: 'exact', head: true }).eq('status', 'accepted').or(`sender_id.eq.${id},receiver_id.eq.${id}`);
       setConnectionsCount(count || 0);
 
-      // Fetch this player's match stats
-      const { data: matches } = await supabase
-        .from('matches')
-        .select('id, match_date, result, court_name, status, sender_id, receiver_id')
-        .or(`sender_id.eq.${id},receiver_id.eq.${id}`)
-        .order('match_date', { ascending: false });
+      const { data: matches } = await supabase.from('matches').select('id, match_date, result, court_name, status, sender_id, receiver_id').or(`sender_id.eq.${id},receiver_id.eq.${id}`).order('match_date', { ascending: false });
 
       if (matches) {
         const today = new Date().toISOString().split('T')[0];
@@ -81,57 +70,37 @@ function UserProfile() {
     if (!currentUser || connecting) return;
     setConnecting(true);
     try {
-      const { data, error } = await supabase
-        .from('connections')
-        .insert({ sender_id: currentUser.id, receiver_id: id, status: 'pending' })
-        .select().single();
-      if (!error && data) {
-        setConnection(data);
-        await sendConnectionRequestNotification(currentUser.id, id);
-      }
-    } catch (err) {
-      console.error('Connect error:', err);
-    } finally {
-      setConnecting(false);
-    }
+      const { data, error } = await supabase.from('connections').insert({ sender_id: currentUser.id, receiver_id: id, status: 'pending' }).select().single();
+      if (!error && data) { setConnection(data); await sendConnectionRequestNotification(currentUser.id, id); }
+    } catch (err) { console.error('Connect error:', err); } finally { setConnecting(false); }
   };
 
   const handleAccept = async () => {
     if (!connection) return;
-    const { data, error } = await supabase
-      .from('connections')
-      .update({ status: 'accepted' })
-      .eq('id', connection.id)
-      .select().single();
+    const { data, error } = await supabase.from('connections').update({ status: 'accepted' }).eq('id', connection.id).select().single();
     if (!error && data) setConnection(data);
   };
 
-  const handleMessage = () => {
-    navigate(`/chat/${id}`);
+  // Helper: normalise specialisation to array
+  const getSpecialisationArray = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    return [val];
   };
 
   if (loading) {
-    return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner} />
-      </div>
-    );
+    return <div style={styles.loadingContainer}><div style={styles.loadingSpinner} /></div>;
   }
 
   if (!profile) {
-    return (
-      <div style={styles.loadingContainer}>
-        <p style={{ color: '#9aa0ac', fontSize: '14px' }}>Profile not found.</p>
-      </div>
-    );
+    return <div style={styles.loadingContainer}><p style={{ color: '#9aa0ac', fontSize: '14px' }}>Profile not found.</p></div>;
   }
 
   const accentColor = roleColors[profile.role] || '#0a1628';
-  const initials = profile.full_name
-    ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : '?';
+  const initials = profile.full_name ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?';
   const status = getConnectionStatus();
   const isConnected = status === 'accepted';
+  const specialisationArray = getSpecialisationArray(profile.coaching_specialisation);
 
   return (
     <div style={styles.container}>
@@ -149,37 +118,21 @@ function UserProfile() {
           {profile.avatar_url ? (
             <img src={profile.avatar_url} alt="avatar" style={styles.avatarPhoto} />
           ) : (
-            <div style={{ ...styles.avatarLarge, backgroundColor: accentColor }}>
-              {initials}
-            </div>
+            <div style={{ ...styles.avatarLarge, backgroundColor: accentColor }}>{initials}</div>
           )}
         </div>
-
         <h2 style={styles.name}>{profile.full_name || 'Unknown'}</h2>
-
         <span style={{ ...styles.roleBadge, backgroundColor: accentColor + '25', color: accentColor, border: `1px solid ${accentColor}40` }}>
           {roleLabels[profile.role] || 'Member'}
         </span>
-
-        {/* Extra badges */}
         {(profile.open_to_sparring || profile.also_coaches) && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {profile.open_to_sparring && (
-              <span style={styles.extraBadge}>⚡ Sparring</span>
-            )}
-            {profile.also_coaches && (
-              <span style={{ ...styles.extraBadge, backgroundColor: 'rgba(168,85,247,0.15)', color: '#a855f7', borderColor: 'rgba(168,85,247,0.3)' }}>📋 Coach</span>
-            )}
+            {profile.open_to_sparring && <span style={styles.extraBadge}>⚡ Sparring</span>}
+            {profile.also_coaches && <span style={{ ...styles.extraBadge, backgroundColor: 'rgba(168,85,247,0.15)', color: '#a855f7', borderColor: 'rgba(168,85,247,0.3)' }}>📋 Coach</span>}
           </div>
         )}
-
-        {profile.location && (
-          <p style={styles.location}>📍 {profile.location}</p>
-        )}
-
-        {profile.utr_rating && (
-          <div style={styles.utrBadge}>UTR {profile.utr_rating}</div>
-        )}
+        {profile.location && <p style={styles.location}>📍 {profile.location}</p>}
+        {profile.utr_rating && <div style={styles.utrBadge}>UTR {profile.utr_rating}</div>}
       </div>
 
       {/* Stats Row */}
@@ -218,23 +171,15 @@ function UserProfile() {
           <>
             <button style={styles.connectedBtn} disabled>Connected ✓</button>
             <button style={styles.actionBtn} onClick={() => navigate(`/schedule/${id}`)}>🎾 Schedule</button>
-            <button style={styles.actionBtn} onClick={handleMessage}>💬 Message</button>
+            <button style={styles.actionBtn} onClick={() => navigate(`/chat/${id}`)}>💬 Message</button>
           </>
         )}
-        {status === 'pending_sent' && (
-          <button style={styles.pendingBtn} disabled>Request Sent…</button>
-        )}
-        {status === 'pending_received' && (
-          <button style={styles.accentBtn} onClick={handleAccept}>Accept Request ✓</button>
-        )}
-        {!status && (
-          <button style={styles.accentBtn} onClick={handleConnect} disabled={connecting}>
-            {connecting ? 'Sending…' : '+ Connect'}
-          </button>
-        )}
+        {status === 'pending_sent' && <button style={styles.pendingBtn} disabled>Request Sent…</button>}
+        {status === 'pending_received' && <button style={styles.accentBtn} onClick={handleAccept}>Accept Request ✓</button>}
+        {!status && <button style={styles.accentBtn} onClick={handleConnect} disabled={connecting}>{connecting ? 'Sending…' : '+ Connect'}</button>}
       </div>
 
-      {/* Booking Buttons — only shown when connected and extras are active */}
+      {/* Booking Buttons */}
       {isConnected && (profile.open_to_sparring || profile.also_coaches) && (
         <div style={styles.bookingRow}>
           {profile.open_to_sparring && (
@@ -264,22 +209,10 @@ function UserProfile() {
           <h3 style={styles.sectionTitle}>Match Stats</h3>
           <div style={styles.statsCard}>
             <div style={styles.statsGrid}>
-              <div style={styles.statBox}>
-                <span style={styles.statBoxVal}>{matchStats.total}</span>
-                <span style={styles.statBoxLabel}>Played</span>
-              </div>
-              <div style={styles.statBox}>
-                <span style={{ ...styles.statBoxVal, color: '#10b981' }}>{matchStats.wins}</span>
-                <span style={styles.statBoxLabel}>Wins</span>
-              </div>
-              <div style={styles.statBox}>
-                <span style={{ ...styles.statBoxVal, color: '#ef4444' }}>{matchStats.losses}</span>
-                <span style={styles.statBoxLabel}>Losses</span>
-              </div>
-              <div style={styles.statBox}>
-                <span style={styles.statBoxVal}>{matchStats.winPct !== null ? `${matchStats.winPct}%` : '—'}</span>
-                <span style={styles.statBoxLabel}>Win Rate</span>
-              </div>
+              <div style={styles.statBox}><span style={styles.statBoxVal}>{matchStats.total}</span><span style={styles.statBoxLabel}>Played</span></div>
+              <div style={styles.statBox}><span style={{ ...styles.statBoxVal, color: '#10b981' }}>{matchStats.wins}</span><span style={styles.statBoxLabel}>Wins</span></div>
+              <div style={styles.statBox}><span style={{ ...styles.statBoxVal, color: '#ef4444' }}>{matchStats.losses}</span><span style={styles.statBoxLabel}>Losses</span></div>
+              <div style={styles.statBox}><span style={styles.statBoxVal}>{matchStats.winPct !== null ? `${matchStats.winPct}%` : '—'}</span><span style={styles.statBoxLabel}>Win Rate</span></div>
             </div>
             {matchStats.favCourt && (
               <div style={styles.favCourtRow}>
@@ -310,14 +243,12 @@ function UserProfile() {
           ))}
           <div style={styles.detailItem}>
             <span style={styles.detailLabel}>Member Since</span>
-            <span style={styles.detailValue}>
-              {new Date(profile.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
-            </span>
+            <span style={styles.detailValue}>{new Date(profile.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</span>
           </div>
         </div>
       </div>
 
-      {/* Extras Section — read-only, only shown if active */}
+      {/* Extras Section */}
       {(profile.open_to_sparring || profile.also_coaches) && (
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Extras</h3>
@@ -331,11 +262,7 @@ function UserProfile() {
                   </div>
                   <div>
                     <p style={styles.extraTitle}>Open to Sparring</p>
-                    {profile.sparring_rate ? (
-                      <p style={styles.extraDesc}>€{profile.sparring_rate}/hr</p>
-                    ) : (
-                      <p style={styles.extraDesc}>Rate not specified</p>
-                    )}
+                    <p style={styles.extraDesc}>{profile.sparring_rate ? `€${profile.sparring_rate}/hr` : 'Rate not specified'}</p>
                   </div>
                 </div>
                 <span style={styles.extraActiveBadge}>Active</span>
@@ -350,14 +277,18 @@ function UserProfile() {
                   <div style={{ ...styles.extraIconBox, backgroundColor: 'rgba(168,85,247,0.1)' }}>
                     <span style={{ fontSize: '20px' }}>📋</span>
                   </div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <p style={styles.extraTitle}>Also Coaches</p>
-                    <p style={styles.extraDesc}>
-                      {[
-                        profile.coaching_specialisation,
-                        profile.coaching_rate ? `€${profile.coaching_rate}/hr` : null,
-                      ].filter(Boolean).join(' · ') || 'Details not specified'}
-                    </p>
+                    {profile.coaching_rate && (
+                      <p style={styles.extraDesc}>€{profile.coaching_rate}/hr</p>
+                    )}
+                    {specialisationArray.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {specialisationArray.map(s => (
+                          <span key={s} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'rgba(168,85,247,0.1)', color: '#a855f7', fontWeight: '500' }}>{s}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <span style={{ ...styles.extraActiveBadge, backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>Active</span>
@@ -372,375 +303,55 @@ function UserProfile() {
 }
 
 const styles = {
-  container: {
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-    backgroundColor: '#f4f6f8',
-    minHeight: '100vh',
-    paddingBottom: '32px',
-  },
-  loadingContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-  },
-  loadingSpinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid #e0e4ea',
-    borderTop: '3px solid #0a1628',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  header: {
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    padding: '20px 20px 0 20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  backButton: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '13px',
-    cursor: 'pointer',
-    fontWeight: '500',
-    width: '48px',
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: '16px',
-    fontWeight: '600',
-    margin: '0',
-    letterSpacing: '-0.2px',
-  },
-  profileHero: {
-    background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)',
-    padding: '20px 20px 32px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-  },
+  container: { fontFamily: "'Helvetica Neue', Arial, sans-serif", backgroundColor: '#f4f6f8', minHeight: '100vh', paddingBottom: '32px' },
+  loadingContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' },
+  loadingSpinner: { width: '32px', height: '32px', border: '3px solid #e0e4ea', borderTop: '3px solid #0a1628', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  header: { background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)', padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  backButton: { color: 'rgba(255,255,255,0.6)', fontSize: '13px', cursor: 'pointer', fontWeight: '500', width: '48px' },
+  headerTitle: { color: 'white', fontSize: '16px', fontWeight: '600', margin: '0', letterSpacing: '-0.2px' },
+  profileHero: { background: 'linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%)', padding: '20px 20px 32px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' },
   avatarWrapper: { marginBottom: '4px' },
-  avatarLarge: {
-    width: '76px',
-    height: '76px',
-    borderRadius: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '28px',
-    fontWeight: '600',
-    color: 'white',
-  },
-  avatarPhoto: {
-    width: '76px',
-    height: '76px',
-    borderRadius: '20px',
-    objectFit: 'cover',
-  },
-  name: {
-    margin: '0',
-    fontSize: '22px',
-    fontWeight: '600',
-    color: 'white',
-    letterSpacing: '-0.3px',
-  },
-  roleBadge: {
-    fontSize: '11px',
-    padding: '4px 12px',
-    borderRadius: '999px',
-    fontWeight: '500',
-    letterSpacing: '0.5px',
-  },
-  extraBadge: {
-    fontSize: '11px',
-    padding: '4px 10px',
-    borderRadius: '999px',
-    fontWeight: '500',
-    letterSpacing: '0.3px',
-    backgroundColor: 'rgba(200,255,0,0.15)',
-    color: '#c8ff00',
-    border: '1px solid rgba(200,255,0,0.3)',
-  },
-  utrBadge: {
-    fontSize: '12px',
-    fontWeight: '700',
-    color: '#c8ff00',
-    backgroundColor: 'rgba(200,255,0,0.12)',
-    padding: '4px 12px',
-    borderRadius: '999px',
-    letterSpacing: '0.5px',
-  },
-  location: {
-    margin: '0',
-    fontSize: '12px',
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '400',
-  },
-  statsRow: {
-    backgroundColor: 'white',
-    borderRadius: '14px',
-    padding: '16px',
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    boxShadow: '0 2px 10px rgba(10,22,40,0.06)',
-    margin: '16px 16px 0 16px',
-  },
-  statItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '4px',
-  },
-  statValue: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#0a1628',
-    letterSpacing: '-0.3px',
-  },
-  statLabel: {
-    fontSize: '10px',
-    color: '#9aa0ac',
-    textTransform: 'uppercase',
-    letterSpacing: '0.8px',
-    fontWeight: '400',
-  },
-  statDivider: {
-    width: '1px',
-    height: '32px',
-    backgroundColor: '#e0e4ea',
-  },
-  actionsRow: {
-    display: 'flex',
-    gap: '10px',
-    padding: '16px 16px 0 16px',
-    flexWrap: 'wrap',
-  },
-  bookingRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '10px 16px 0 16px',
-  },
-  bookSparringBtn: {
-    width: '100%',
-    backgroundColor: 'rgba(200,255,0,0.1)',
-    color: '#5a7a00',
-    border: '1.5px solid rgba(200,255,0,0.4)',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-    textAlign: 'center',
-  },
-  bookCoachingBtn: {
-    width: '100%',
-    backgroundColor: 'rgba(168,85,247,0.08)',
-    color: '#7c3aed',
-    border: '1.5px solid rgba(168,85,247,0.25)',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-    textAlign: 'center',
-  },
-  accentBtn: {
-    flex: 1,
-    backgroundColor: '#0a1628',
-    color: '#c8ff00',
-    border: 'none',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-  },
-  connectedBtn: {
-    flex: 1,
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-    border: 'none',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'default',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-  },
-  pendingBtn: {
-    flex: 1,
-    backgroundColor: '#f4f6f8',
-    color: '#9aa0ac',
-    border: '1.5px solid #e0e4ea',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'default',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-  },
-  actionBtn: {
-    flex: 1,
-    backgroundColor: 'white',
-    color: '#0a1628',
-    border: '1.5px solid #e0e4ea',
-    borderRadius: '12px',
-    padding: '13px',
-    fontSize: '13px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'Helvetica Neue', Arial, sans-serif",
-  },
-  section: {
-    margin: '16px 16px 0 16px',
-  },
-  sectionTitle: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#9aa0ac',
-    textTransform: 'uppercase',
-    letterSpacing: '1px',
-    margin: '0 0 10px 0',
-  },
-  bio: {
-    fontSize: '13px',
-    color: '#5a6270',
-    lineHeight: '1.6',
-    backgroundColor: 'white',
-    padding: '14px',
-    borderRadius: '12px',
-    margin: '0',
-    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
-    fontWeight: '400',
-  },
-  statsCard: {
-    backgroundColor: 'white',
-    borderRadius: '14px',
-    padding: '16px',
-    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr 1fr',
-    gap: '8px',
-  },
-  statBox: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '3px',
-  },
-  statBoxVal: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#0a1628',
-    letterSpacing: '-0.3px',
-  },
-  statBoxLabel: {
-    fontSize: '9px',
-    color: '#9aa0ac',
-    textTransform: 'uppercase',
-    letterSpacing: '0.8px',
-    fontWeight: '500',
-  },
-  favCourtRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    paddingTop: '8px',
-    borderTop: '1px solid #f0f2f5',
-    fontSize: '13px',
-  },
-  favCourtText: {
-    fontSize: '12px',
-    color: '#5a6270',
-    fontWeight: '400',
-  },
-  detailsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '10px',
-  },
-  detailItem: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '12px 14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
-  },
-  detailLabel: {
-    fontSize: '10px',
-    color: '#9aa0ac',
-    textTransform: 'uppercase',
-    letterSpacing: '0.8px',
-    fontWeight: '500',
-  },
-  detailValue: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#0a1628',
-    letterSpacing: '-0.2px',
-  },
-  extraCard: {
-    backgroundColor: 'white',
-    borderRadius: '14px',
-    padding: '16px',
-    boxShadow: '0 2px 8px rgba(10,22,40,0.05)',
-  },
-  extraCardTop: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  extraCardLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    flex: 1,
-  },
-  extraIconBox: {
-    width: '44px',
-    height: '44px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  extraTitle: {
-    margin: '0 0 2px 0',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#0a1628',
-  },
-  extraDesc: {
-    margin: '0',
-    fontSize: '11px',
-    color: '#9aa0ac',
-    fontWeight: '400',
-  },
-  extraActiveBadge: {
-    fontSize: '10px',
-    padding: '3px 10px',
-    borderRadius: '999px',
-    fontWeight: '600',
-    backgroundColor: 'rgba(200,255,0,0.12)',
-    color: '#5a7a00',
-    letterSpacing: '0.3px',
-    flexShrink: 0,
-  },
+  avatarLarge: { width: '76px', height: '76px', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '600', color: 'white' },
+  avatarPhoto: { width: '76px', height: '76px', borderRadius: '20px', objectFit: 'cover' },
+  name: { margin: '0', fontSize: '22px', fontWeight: '600', color: 'white', letterSpacing: '-0.3px' },
+  roleBadge: { fontSize: '11px', padding: '4px 12px', borderRadius: '999px', fontWeight: '500', letterSpacing: '0.5px' },
+  extraBadge: { fontSize: '11px', padding: '4px 10px', borderRadius: '999px', fontWeight: '500', letterSpacing: '0.3px', backgroundColor: 'rgba(200,255,0,0.15)', color: '#c8ff00', border: '1px solid rgba(200,255,0,0.3)' },
+  utrBadge: { fontSize: '12px', fontWeight: '700', color: '#c8ff00', backgroundColor: 'rgba(200,255,0,0.12)', padding: '4px 12px', borderRadius: '999px', letterSpacing: '0.5px' },
+  location: { margin: '0', fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontWeight: '400' },
+  statsRow: { backgroundColor: 'white', borderRadius: '14px', padding: '16px', display: 'flex', justifyContent: 'space-around', alignItems: 'center', boxShadow: '0 2px 10px rgba(10,22,40,0.06)', margin: '16px 16px 0 16px' },
+  statItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' },
+  statValue: { fontSize: '16px', fontWeight: '600', color: '#0a1628', letterSpacing: '-0.3px' },
+  statLabel: { fontSize: '10px', color: '#9aa0ac', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '400' },
+  statDivider: { width: '1px', height: '32px', backgroundColor: '#e0e4ea' },
+  actionsRow: { display: 'flex', gap: '10px', padding: '16px 16px 0 16px', flexWrap: 'wrap' },
+  bookingRow: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 16px 0 16px' },
+  bookSparringBtn: { width: '100%', backgroundColor: 'rgba(200,255,0,0.1)', color: '#5a7a00', border: '1.5px solid rgba(200,255,0,0.4)', borderRadius: '12px', padding: '13px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Helvetica Neue', Arial, sans-serif", textAlign: 'center' },
+  bookCoachingBtn: { width: '100%', backgroundColor: 'rgba(168,85,247,0.08)', color: '#7c3aed', border: '1.5px solid rgba(168,85,247,0.25)', borderRadius: '12px', padding: '13px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Helvetica Neue', Arial, sans-serif", textAlign: 'center' },
+  accentBtn: { flex: 1, backgroundColor: '#0a1628', color: '#c8ff00', border: 'none', borderRadius: '12px', padding: '13px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  connectedBtn: { flex: 1, backgroundColor: '#e8f5e9', color: '#2e7d32', border: 'none', borderRadius: '12px', padding: '13px', fontSize: '13px', fontWeight: '600', cursor: 'default', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  pendingBtn: { flex: 1, backgroundColor: '#f4f6f8', color: '#9aa0ac', border: '1.5px solid #e0e4ea', borderRadius: '12px', padding: '13px', fontSize: '13px', fontWeight: '600', cursor: 'default', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  actionBtn: { flex: 1, backgroundColor: 'white', color: '#0a1628', border: '1.5px solid #e0e4ea', borderRadius: '12px', padding: '13px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Helvetica Neue', Arial, sans-serif" },
+  section: { margin: '16px 16px 0 16px' },
+  sectionTitle: { fontSize: '11px', fontWeight: '600', color: '#9aa0ac', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px 0' },
+  bio: { fontSize: '13px', color: '#5a6270', lineHeight: '1.6', backgroundColor: 'white', padding: '14px', borderRadius: '12px', margin: '0', boxShadow: '0 2px 8px rgba(10,22,40,0.05)', fontWeight: '400' },
+  statsCard: { backgroundColor: 'white', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(10,22,40,0.05)', display: 'flex', flexDirection: 'column', gap: '12px' },
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' },
+  statBox: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' },
+  statBoxVal: { fontSize: '20px', fontWeight: '700', color: '#0a1628', letterSpacing: '-0.3px' },
+  statBoxLabel: { fontSize: '9px', color: '#9aa0ac', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '500' },
+  favCourtRow: { display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid #f0f2f5', fontSize: '13px' },
+  favCourtText: { fontSize: '12px', color: '#5a6270', fontWeight: '400' },
+  detailsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
+  detailItem: { backgroundColor: 'white', borderRadius: '12px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 2px 8px rgba(10,22,40,0.05)' },
+  detailLabel: { fontSize: '10px', color: '#9aa0ac', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '500' },
+  detailValue: { fontSize: '14px', fontWeight: '600', color: '#0a1628', letterSpacing: '-0.2px' },
+  extraCard: { backgroundColor: 'white', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(10,22,40,0.05)' },
+  extraCardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  extraCardLeft: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1 },
+  extraIconBox: { width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  extraTitle: { margin: '0 0 2px 0', fontSize: '14px', fontWeight: '600', color: '#0a1628' },
+  extraDesc: { margin: '0', fontSize: '11px', color: '#9aa0ac', fontWeight: '400' },
+  extraActiveBadge: { fontSize: '10px', padding: '3px 10px', borderRadius: '999px', fontWeight: '600', backgroundColor: 'rgba(200,255,0,0.12)', color: '#5a7a00', letterSpacing: '0.3px', flexShrink: 0 },
 };
 
 export default UserProfile;
